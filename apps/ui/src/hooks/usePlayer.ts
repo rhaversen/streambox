@@ -56,7 +56,7 @@ export function usePlayer() {
     video.removeAttribute('src')
     video.load()
     setVideoError(null)
-    setPosition(0)
+    setPosition(streamInfo.streamStartTime ?? 0)
     setLocalDuration(0)
     setVideoPaused(true)
     setAudioTracks([])
@@ -102,7 +102,7 @@ export function usePlayer() {
     const video = videoRef.current
     if (!video) return
 
-    const onTimeUpdate = () => setPosition(video.currentTime)
+    const onTimeUpdate = () => setPosition(video.currentTime + (streamInfo.streamStartTime ?? 0))
     const onDurationChange = () => {
       if (isFinite(video.duration) && video.duration > 0) setLocalDuration(video.duration)
     }
@@ -171,8 +171,23 @@ export function usePlayer() {
   function pause() { videoRef.current?.pause(); showOsd() }
   function resume() { void videoRef.current?.play(); showOsd() }
 
-  function seek(position: number) {
-    if (videoRef.current) videoRef.current.currentTime = position
+  function seek(contentPosition: number) {
+    const video = videoRef.current
+    if (!video) return
+    const startTime = streamInfo.streamStartTime ?? 0
+    const videoTime = contentPosition - startTime
+    let isBuffered = false
+    for (let i = 0; i < video.buffered.length; i++) {
+      if (videoTime >= video.buffered.start(i) && videoTime <= video.buffered.end(i)) {
+        isBuffered = true
+        break
+      }
+    }
+    if (isBuffered) {
+      video.currentTime = videoTime
+    } else {
+      bridge.send({ type: 'SEEK_STREAM', payload: { position: contentPosition } })
+    }
     showOsd()
   }
 

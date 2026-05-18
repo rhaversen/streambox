@@ -5,4 +5,5 @@ export interface StreamInfo {
   streamUrl?: string | null
   episode?: string
   errorMessage?: string
+  streamStartTime?: number
 }

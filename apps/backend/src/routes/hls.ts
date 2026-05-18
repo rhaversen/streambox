@@ -81,6 +81,7 @@ export async function startHlsStream(
   sessionId: string,
   videoCodec: string,
   audioStreams: AudioStreamInfo[] = [],
+  startTime = 0,
 ): Promise<string> {
   const myGeneration = ++activeGeneration
 
@@ -123,6 +124,7 @@ export async function startHlsStream(
     ffArgs = [
       '-loglevel', 'warning',
       ...HTTP_FLAGS,
+      ...(startTime > 0 ? ['-ss', startTime.toString()] : []),
       '-i', url,
       '-map', '0:v:0',
       ...audioMaps,
@@ -142,6 +144,7 @@ export async function startHlsStream(
     ffArgs = [
       '-loglevel', 'warning',
       ...HTTP_FLAGS,
+      ...(startTime > 0 ? ['-ss', startTime.toString()] : []),
       '-i', url,
       '-map', '0:v:0',
       '-map', '0:a:0',

@@ -3,7 +3,7 @@ import type { BridgeMessage, StreamInfo, Show } from '@streambox/shared-types'
 import type { StreamResolver } from '../debrid/StreamResolver.js'
 import type { TMDB } from '../metadata/TMDB.js'
 import { randomUUID } from 'crypto'
-import { probeStream, startHlsStream, StreamCancelledError } from '../routes/hls.js'
+import { probeStream, startHlsStream, StreamCancelledError, type AudioStreamInfo } from '../routes/hls.js'
 
 export class BridgeServer {
   private clients = new Set<import('ws').WebSocket>()
@@ -17,6 +17,9 @@ export class BridgeServer {
   private currentSeason?: number
   private currentEpisode?: number
   private currentShow?: Show
+  private currentSourceUrl?: string
+  private currentVideoCodec = ''
+  private currentAudioStreams: AudioStreamInfo[] = []
 
   constructor(
     private readonly resolver: StreamResolver,
@@ -51,7 +54,7 @@ export class BridgeServer {
         const { imdbId, season, episode } = msg.payload
         const t0 = Date.now()
 
-        this.updateInfo({ loading: true, title: imdbId, episode: undefined, streamUrl: null, errorMessage: undefined })
+        this.updateInfo({ loading: true, title: imdbId, episode: undefined, streamUrl: null, errorMessage: undefined, streamStartTime: 0 })
 
         const candidates = await this.resolver.resolve(imdbId, season, episode)
         console.log(`[pipeline] torrentio: ${Date.now() - t0}ms`)
@@ -80,6 +83,9 @@ export class BridgeServer {
         this.currentSeason = season
         this.currentEpisode = episode
         this.currentShow = isShow && meta && 'seasons' in meta ? meta : undefined
+        this.currentSourceUrl = best.url
+        this.currentVideoCodec = probeResult.videoCodec
+        this.currentAudioStreams = probeResult.audioStreams
 
         const title = meta?.title ?? imdbId
         const episodeLabel =
@@ -93,6 +99,14 @@ export class BridgeServer {
       case 'NEXT_EPISODE':
         await this.handleNextEpisode()
         break
+      case 'SEEK_STREAM': {
+        const { position } = msg.payload
+        if (!this.currentSourceUrl) return
+        this.updateInfo({ loading: true, streamUrl: null })
+        const seekUrl = await startHlsStream(this.currentSourceUrl, randomUUID(), this.currentVideoCodec, this.currentAudioStreams, position)
+        this.updateInfo({ loading: false, streamUrl: seekUrl, streamStartTime: position })
+        break
+      }
     }
   }
 
