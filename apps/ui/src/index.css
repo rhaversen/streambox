@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ui-scale: 0.833;
+  font-size: calc(var(--ui-scale) * 1vw);
+}
+
+html {
+  height: 100%;
+}
+
+* {
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  background: #000;
+  color: #fff;
+  font-family: system-ui, sans-serif;
+  overflow: hidden;
+  width: 100vw;
+  height: 100%;
+}
+
+#root {
+  height: 100%;
+}

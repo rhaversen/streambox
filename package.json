@@ -1,0 +1,17 @@
+{
+  "name": "streambox",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --parallel --filter @streambox/backend --filter @streambox/ui dev",
+    "dev:electron": "pnpm --parallel --filter @streambox/backend --filter @streambox/ui --filter @streambox/electron dev",
+    "build": "pnpm --filter @streambox/shared-types build && pnpm --parallel --filter @streambox/backend --filter @streambox/ui build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["ffmpeg-static", "ffprobe-static"]
+  }
+}

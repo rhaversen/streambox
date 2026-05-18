@@ -1,0 +1,14 @@
+{
+  "name": "@streambox/electron",
+  "version": "0.0.1",
+  "private": true,
+  "main": "dist/main.js",
+  "scripts": {
+    "dev": "tsc && wait-on http://localhost:3000 && electron .",
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "electron": "^35.0.0",
+    "wait-on": "^8.0.0"
+  }
+}
