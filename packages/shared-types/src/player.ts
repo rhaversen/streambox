@@ -6,4 +6,5 @@ export interface StreamInfo {
   episode?: string
   errorMessage?: string
   streamStartTime?: number
+  transcodedEnd?: number
 }

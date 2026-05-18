@@ -33,7 +33,6 @@ export function usePlayer() {
   const [muted, setMutedState] = useState(false)
   const [textTracks, setTextTracksState] = useState<TextTrackInfo[]>([])
   const [audioTracks, setAudioTracks] = useState<AudioTrackInfo[]>([])
-  const [buffered, setBuffered] = useState<BufferedRange[]>([])
   const [videoError, setVideoError] = useState<string | null>(null)
   const osdTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -60,7 +59,6 @@ export function usePlayer() {
     setLocalDuration(0)
     setVideoPaused(true)
     setAudioTracks([])
-    setBuffered([])
 
     if (!url) return
 
@@ -127,13 +125,6 @@ export function usePlayer() {
 
     video.textTracks.addEventListener('addtrack', refreshTextTracks)
     video.textTracks.addEventListener('removetrack', refreshTextTracks)
-    const refreshBuffered = () => {
-      const ranges: BufferedRange[] = []
-      for (let i = 0; i < video.buffered.length; i++) {
-        ranges.push({ start: video.buffered.start(i), end: video.buffered.end(i) })
-      }
-      setBuffered(ranges)
-    }
     video.addEventListener('timeupdate', onTimeUpdate)
     video.addEventListener('durationchange', onDurationChange)
     video.addEventListener('playing', onPlaying)
@@ -141,7 +132,6 @@ export function usePlayer() {
     video.addEventListener('ended', onEnded)
     video.addEventListener('volumechange', onVolumeChange)
     video.addEventListener('error', onError)
-    video.addEventListener('progress', refreshBuffered)
     return () => {
       video.textTracks.removeEventListener('addtrack', refreshTextTracks)
       video.textTracks.removeEventListener('removetrack', refreshTextTracks)
@@ -152,11 +142,14 @@ export function usePlayer() {
       video.removeEventListener('ended', onEnded)
       video.removeEventListener('volumechange', onVolumeChange)
       video.removeEventListener('error', onError)
-      video.removeEventListener('progress', refreshBuffered)
     }
   })
 
   const duration = streamInfo.duration > 0 ? streamInfo.duration : localDuration
+
+  const buffered: BufferedRange[] = streamInfo.transcodedEnd !== undefined
+    ? [{ start: 0, end: streamInfo.transcodedEnd }]
+    : []
 
   function showOsd() {
     setOsdVisible(true)

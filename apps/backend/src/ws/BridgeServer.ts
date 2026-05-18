@@ -54,7 +54,7 @@ export class BridgeServer {
         const { imdbId, season, episode } = msg.payload
         const t0 = Date.now()
 
-        this.updateInfo({ loading: true, title: imdbId, episode: undefined, streamUrl: null, errorMessage: undefined, streamStartTime: 0 })
+        this.updateInfo({ loading: true, title: imdbId, episode: undefined, streamUrl: null, errorMessage: undefined, streamStartTime: 0, transcodedEnd: undefined })
 
         const candidates = await this.resolver.resolve(imdbId, season, episode)
         console.log(`[pipeline] torrentio: ${Date.now() - t0}ms`)
@@ -75,7 +75,8 @@ export class BridgeServer {
         console.log(`[pipeline] probe + tmdb (parallel): ${Date.now() - t1}ms, ${probeResult.audioStreams.length} audio track(s)`)
 
         const t2 = Date.now()
-        const manifestUrl = await startHlsStream(best.url, randomUUID(), probeResult.videoCodec, probeResult.audioStreams)
+        const manifestUrl = await startHlsStream(best.url, randomUUID(), probeResult.videoCodec, probeResult.audioStreams, 0,
+          (transcodedEnd) => this.updateInfo({ transcodedEnd }))
         console.log(`[pipeline] hls first segment: ${Date.now() - t2}ms`)
         console.log(`[pipeline] total: ${Date.now() - t0}ms`)
 
@@ -102,8 +103,9 @@ export class BridgeServer {
       case 'SEEK_STREAM': {
         const { position } = msg.payload
         if (!this.currentSourceUrl) return
-        this.updateInfo({ loading: true, streamUrl: null })
-        const seekUrl = await startHlsStream(this.currentSourceUrl, randomUUID(), this.currentVideoCodec, this.currentAudioStreams, position)
+        this.updateInfo({ loading: true, streamUrl: null, transcodedEnd: undefined })
+        const seekUrl = await startHlsStream(this.currentSourceUrl, randomUUID(), this.currentVideoCodec, this.currentAudioStreams, position,
+          (transcodedEnd) => this.updateInfo({ transcodedEnd }))
         this.updateInfo({ loading: false, streamUrl: seekUrl, streamStartTime: position })
         break
       }

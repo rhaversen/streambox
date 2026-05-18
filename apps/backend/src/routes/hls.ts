@@ -82,6 +82,7 @@ export async function startHlsStream(
   videoCodec: string,
   audioStreams: AudioStreamInfo[] = [],
   startTime = 0,
+  onProgress?: (transcodedSeconds: number) => void,
 ): Promise<string> {
   const myGeneration = ++activeGeneration
 
@@ -123,6 +124,7 @@ export async function startHlsStream(
     ]
     ffArgs = [
       '-loglevel', 'warning',
+      '-progress', 'pipe:1',
       ...HTTP_FLAGS,
       ...(startTime > 0 ? ['-ss', startTime.toString()] : []),
       '-i', url,
@@ -143,6 +145,7 @@ export async function startHlsStream(
   } else {
     ffArgs = [
       '-loglevel', 'warning',
+      '-progress', 'pipe:1',
       ...HTTP_FLAGS,
       ...(startTime > 0 ? ['-ss', startTime.toString()] : []),
       '-i', url,
@@ -164,6 +167,18 @@ export async function startHlsStream(
   const ff = spawn(ffmpegPath, ffArgs, { cwd: dir })
 
   activeProcess = ff
+  if (onProgress) {
+    let buf = ''
+    ff.stdout.on('data', (d: Buffer) => {
+      buf += d.toString()
+      const lines = buf.split('\n')
+      buf = lines.pop() ?? ''
+      for (const line of lines) {
+        const m = line.match(/^out_time_ms=(\d+)$/)
+        if (m) onProgress(parseInt(m[1]!, 10) / 1_000_000)
+      }
+    })
+  }
   ff.stderr.on('data', (d: Buffer) => console.warn(`[ffmpeg] ${d.toString().trimEnd()}`))
   ff.on('error', (err: Error) => console.error(`[ffmpeg] ${err.message}`))
   ff.on('close', (code) => {
