@@ -1,6 +1,7 @@
 {
   "name": "streambox",
   "private": true,
+  "packageManager": "pnpm@11.1.2",
   "scripts": {
     "dev": "pnpm --parallel --filter @streambox/backend --filter @streambox/ui dev",
     "build": "pnpm --filter @streambox/shared-types build && pnpm --parallel --filter @streambox/backend --filter @streambox/ui build",
@@ -8,9 +9,6 @@
     "lint": "pnpm -r lint"
   },
   "devDependencies": {
-    "typescript": "^5.5.0"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": ["ffmpeg-static", "ffprobe-static"]
+    "typescript": "^6.0.3"
   }
 }

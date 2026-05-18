@@ -1,5 +1,4 @@
 import type { FastifyInstance } from 'fastify'
-import type { SocketStream } from '@fastify/websocket'
 import type { BridgeMessage, StreamInfo, Show } from '@streambox/shared-types'
 import type { StreamResolver } from '../debrid/StreamResolver.js'
 import type { TMDB } from '../metadata/TMDB.js'
@@ -25,13 +24,12 @@ export class BridgeServer {
   ) {}
 
   register(fastify: FastifyInstance): void {
-    fastify.get('/ws', { websocket: true }, (connection: SocketStream) => {
-      const socket = connection.socket
+    fastify.get('/ws', { websocket: true }, (socket: import('ws').WebSocket) => {
       this.clients.add(socket)
 
       socket.send(JSON.stringify({ type: 'STREAM_INFO', payload: this.streamInfo } satisfies BridgeMessage))
 
-      socket.on('message', (raw) => {
+      socket.on('message', (raw: Buffer | string) => {
         try {
           const msg = JSON.parse(raw.toString()) as BridgeMessage
           void this.handleMessage(msg).catch((err: unknown) => {

@@ -10,25 +10,26 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@noriginmedia/norigin-spatial-navigation": "^1.0.0",
+    "@noriginmedia/norigin-spatial-navigation": "^3.1.0",
     "@streambox/shared-types": "workspace:*",
-    "@tanstack/react-query": "^5.0.0",
-    "framer-motion": "^11.0.0",
+    "@tanstack/react-query": "^5.100.10",
+    "framer-motion": "^12.39.0",
     "hls.js": "^1.6.16",
-    "lucide-react": "^0.400.0",
-    "react": "^18.3.0",
-    "react-dom": "^18.3.0",
-    "react-router-dom": "^6.24.0",
-    "zustand": "^4.5.0"
+    "lucide-react": "^1.16.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "react-router-dom": "^7.15.1",
+    "zustand": "^5.0.13"
   },
   "devDependencies": {
-    "@types/react": "^18.3.0",
-    "@types/react-dom": "^18.3.0",
-    "@vitejs/plugin-react": "^4.3.0",
-    "autoprefixer": "^10.4.0",
-    "postcss": "^8.4.0",
-    "tailwindcss": "^3.4.0",
-    "typescript": "^5.5.0",
-    "vite": "^5.3.0"
+    "@tailwindcss/postcss": "^4.3.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.2",
+    "autoprefixer": "^10.5.0",
+    "postcss": "^8.5.14",
+    "tailwindcss": "^4.3.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.13"
   }
 }

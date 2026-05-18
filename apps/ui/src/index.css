@@ -1,6 +1,29 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  --text-tv-xs: 1.1rem;
+  --text-tv-xs--line-height: 1.6rem;
+  --text-tv-sm: 1.4rem;
+  --text-tv-sm--line-height: 2rem;
+  --text-tv-base: 1.8rem;
+  --text-tv-base--line-height: 2.6rem;
+  --text-tv-lg: 2.4rem;
+  --text-tv-lg--line-height: 3.2rem;
+  --text-tv-xl: 3.2rem;
+  --text-tv-xl--line-height: 4rem;
+  --text-tv-2xl: 4.8rem;
+  --text-tv-2xl--line-height: 5.6rem;
+  --text-tv-4xl: 7.2rem;
+  --text-tv-4xl--line-height: 8rem;
+}
+
+@utility scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
 
 :root {
   --ui-scale: 0.833;

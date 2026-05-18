@@ -35,7 +35,7 @@ export function usePlayer() {
   const [audioTracks, setAudioTracks] = useState<AudioTrackInfo[]>([])
   const [buffered, setBuffered] = useState<BufferedRange[]>([])
   const [videoError, setVideoError] = useState<string | null>(null)
-  const osdTimer = useRef<ReturnType<typeof setTimeout>>()
+  const osdTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const hlsRef = useRef<Hls | null>(null)
 

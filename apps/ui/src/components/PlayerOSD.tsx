@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { JSX } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Play, Pause, RotateCcw, RotateCw, Volume2, VolumeX, Captions, Music, AlertCircle } from 'lucide-react'
 import { ProgressBar } from './ProgressBar.js'
