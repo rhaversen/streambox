@@ -1,4 +1,6 @@
 import axios from 'axios'
+import type { AxiosRequestConfig } from 'axios'
+import { createGunzip, constants as zlibConstants } from 'zlib'
 import type { Show, Movie, Episode, Season, MediaCard } from '@streambox/shared-types'
 
 interface TMDBTrendingMovie {
@@ -75,21 +77,39 @@ export class TMDB {
     return { api_key: this.apiKey }
   }
 
+  /** Axios get that handles TMDB's gzip responses missing Content-Encoding header */
+  private async tmdbGet<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
+    const res = await axios.get<Buffer>(url, { ...config, responseType: 'arraybuffer' })
+    const buf = Buffer.from(res.data)
+    if (buf[0] === 0x1f && buf[1] === 0x8b) {
+      const text = await new Promise<string>((resolve, reject) => {
+        const gunzip = createGunzip({ finishFlush: zlibConstants.Z_SYNC_FLUSH })
+        const chunks: Buffer[] = []
+        gunzip.on('data', (chunk: Buffer) => chunks.push(chunk))
+        gunzip.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
+        gunzip.on('error', reject)
+        gunzip.end(buf)
+      })
+      return JSON.parse(text) as T
+    }
+    return JSON.parse(buf.toString('utf8')) as T
+  }
+
   async getShowByImdbId(imdbId: string): Promise<Show | null> {
-    const findRes = await axios.get<{ tv_results: TMDBShowResult[] }>(
+    const findRes = await this.tmdbGet<{ tv_results: TMDBShowResult[] }>(
       `${this.baseUrl}/find/${imdbId}`,
       { params: { ...this.params, external_source: 'imdb_id' } }
     )
-    const result = findRes.data.tv_results[0]
+    const result = findRes.tv_results[0]
     if (!result) return null
 
-    const seasonsRes = await axios.get<{ seasons: TMDBSeason[] }>(
+    const seasonsRes = await this.tmdbGet<{ seasons: TMDBSeason[] }>(
       `${this.baseUrl}/tv/${result.id}`,
       { params: this.params }
     )
 
     const seasons: Season[] = await Promise.all(
-      seasonsRes.data.seasons
+      seasonsRes.seasons
         .filter((s) => s.season_number > 0)
         .map((s) => this.fetchSeason(result.id, s.season_number, s.poster_path))
     )
@@ -108,11 +128,11 @@ export class TMDB {
   }
 
   private async fetchSeason(tmdbShowId: number, seasonNumber: number, posterPath: string | null): Promise<Season> {
-    const res = await axios.get<TMDBSeason>(
+    const res = await this.tmdbGet<TMDBSeason>(
       `${this.baseUrl}/tv/${tmdbShowId}/season/${seasonNumber}`,
       { params: this.params }
     )
-    const episodes: Episode[] = res.data.episodes.map((e) => ({
+    const episodes: Episode[] = res.episodes.map((e) => ({
       tmdbId: tmdbShowId,
       season: seasonNumber,
       episode: e.episode_number,
@@ -131,11 +151,11 @@ export class TMDB {
   }
 
   async getMovieByImdbId(imdbId: string): Promise<Movie | null> {
-    const findRes = await axios.get<{ movie_results: TMDBMovieResult[] }>(
+    const findRes = await this.tmdbGet<{ movie_results: TMDBMovieResult[] }>(
       `${this.baseUrl}/find/${imdbId}`,
       { params: { ...this.params, external_source: 'imdb_id' } }
     )
-    const result = findRes.data.movie_results[0]
+    const result = findRes.movie_results[0]
     if (!result) return null
 
     return {
@@ -152,7 +172,7 @@ export class TMDB {
   }
 
   async searchMulti(query: string): Promise<MediaCard[]> {
-    const res = await axios.get<{ results: Array<{
+    const res = await this.tmdbGet<{ results: Array<{
       id: number; media_type: string; name?: string; title?: string
       poster_path?: string; backdrop_path?: string
       release_date?: string; first_air_date?: string; overview?: string
@@ -161,13 +181,13 @@ export class TMDB {
       { params: { ...this.params, query } }
     )
     const cards: MediaCard[] = []
-    for (const item of res.data.results.slice(0, 10)) {
+    for (const item of (res.results ?? []).slice(0, 10)) {
       if (item.media_type !== 'tv' && item.media_type !== 'movie') continue
-      const extRes = await axios.get<TMDBExternalIds>(
+      const extRes = await this.tmdbGet<TMDBExternalIds>(
         `${this.baseUrl}/${item.media_type}/${item.id}/external_ids`,
         { params: this.params }
       )
-      const imdbId = extRes.data.imdb_id
+      const imdbId = extRes.imdb_id
       if (!imdbId) continue
       cards.push({
         imdbId,
@@ -184,18 +204,18 @@ export class TMDB {
   }
 
   async getTrendingMovieCards(count = 12): Promise<MediaCard[]> {
-    const res = await axios.get<{ results: TMDBTrendingMovie[] }>(
+    const res = await this.tmdbGet<{ results: TMDBTrendingMovie[] }>(
       `${this.baseUrl}/trending/movie/week`,
       { params: this.params }
     )
-    const items = res.data.results.slice(0, count)
+    const items = (res.results ?? []).slice(0, count)
     const cards = await Promise.all(
       items.map(async (item): Promise<MediaCard | null> => {
-        const ext = await axios.get<TMDBExternalIds>(
+        const ext = await this.tmdbGet<TMDBExternalIds>(
           `${this.baseUrl}/movie/${item.id}/external_ids`,
           { params: this.params }
         )
-        const imdbId = ext.data.imdb_id
+        const imdbId = ext.imdb_id
         if (!imdbId) return null
         return {
           imdbId,
@@ -213,18 +233,18 @@ export class TMDB {
   }
 
   async getTrendingSeriesCards(count = 12): Promise<MediaCard[]> {
-    const res = await axios.get<{ results: TMDBTrendingSeries[] }>(
+    const res = await this.tmdbGet<{ results: TMDBTrendingSeries[] }>(
       `${this.baseUrl}/trending/tv/week`,
       { params: this.params }
     )
-    const items = res.data.results.slice(0, count)
+    const items = (res.results ?? []).slice(0, count)
     const cards = await Promise.all(
       items.map(async (item): Promise<MediaCard | null> => {
-        const ext = await axios.get<TMDBExternalIds>(
+        const ext = await this.tmdbGet<TMDBExternalIds>(
           `${this.baseUrl}/tv/${item.id}/external_ids`,
           { params: this.params }
         )
-        const imdbId = ext.data.imdb_id
+        const imdbId = ext.imdb_id
         if (!imdbId) return null
         return {
           imdbId,
