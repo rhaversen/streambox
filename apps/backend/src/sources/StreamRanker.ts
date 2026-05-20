@@ -17,9 +17,9 @@ const SOURCE_SCORE: Record<StreamCandidate['source'], number> = {
 }
 
 const CODEC_SCORE: Record<StreamCandidate['codec'], number> = {
-  'h264':    30,
-  'hevc':    20,
-  'av1':     10,
+  'h264':    2000,
+  'hevc':    10,
+  'av1':     5,
   'unknown': 0,
 }
 
