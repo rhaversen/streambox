@@ -6,7 +6,7 @@ import { PlayerOSD } from '../components/PlayerOSD.js'
 export function Player() {
   const { imdbId, season, episode } = useParams<{ imdbId: string; season?: string; episode?: string }>()
   const { streamInfo, videoPaused, position, duration, osdVisible, videoRef, play, pause, resume, seek, showOsd,
-    volume, muted, textTracks, audioTracks, buffered, videoError, setVolume, toggleMute, selectTextTrack, selectAudioTrack,
+    volume, muted, textTracks, audioTracks, buffered, videoError, isBuffering, setVolume, toggleMute, selectAudioTrack,
   } = usePlayer()
   const navigate = useNavigate()
   const sentRef = useRef<string | null>(null)
@@ -85,6 +85,12 @@ export function Player() {
       {videoError && (
         <div className="absolute top-4 left-4 right-4 z-50 bg-red-900/90 text-red-200 text-xs font-mono p-3 rounded break-all">
           {videoError}
+        </div>
+      )}
+
+      {isBuffering && !streamInfo.loading && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="w-16 h-16 border-4 border-white/30 border-t-white rounded-full animate-spin" />
         </div>
       )}
 

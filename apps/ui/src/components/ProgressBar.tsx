@@ -31,11 +31,16 @@ export function ProgressBar({ position, duration, buffered, onSeek }: ProgressBa
       : `${m}:${String(s).padStart(2, '0')}`
   }
 
+  function formatRelative(seconds: number) {
+    const sign = seconds >= 0 ? '+' : '-'
+    return `${sign}${formatTime(Math.abs(seconds))}`
+  }
+
   return (
     <div className="flex items-center gap-4">
       <span className="text-tv-sm text-white/70 tabular-nums w-16 text-right">{formatTime(position)}</span>
       <div
-        className="flex-1 h-2 bg-white/20 rounded-full cursor-pointer relative"
+        className="flex-1 h-1.5 bg-white/10 rounded-full cursor-pointer relative"
         onClick={handleClick}
         onMouseMove={(e) => setHoverRatio(getEventRatio(e))}
         onMouseLeave={() => setHoverRatio(null)}
@@ -43,7 +48,7 @@ export function ProgressBar({ position, duration, buffered, onSeek }: ProgressBa
         {buffered && duration > 0 && buffered.map((range, i) => (
           <div
             key={i}
-            className="absolute inset-y-0 bg-white/40 rounded-full"
+            className="absolute inset-y-0 rounded-full bg-sky-400/50"
             style={{
               left: `${(range.start / duration) * 100}%`,
               width: `${((range.end - range.start) / duration) * 100}%`,
@@ -51,24 +56,24 @@ export function ProgressBar({ position, duration, buffered, onSeek }: ProgressBa
           />
         ))}
         <div
-          className="absolute inset-y-0 left-0 bg-white rounded-full"
+          className="absolute inset-y-0 left-0 rounded-full bg-sky-400"
           style={{ width: `${percent}%` }}
         />
         <div
-          className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full -ml-2 shadow"
+          className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 bg-white rounded-full -ml-1.5 shadow"
           style={{ left: `${percent}%` }}
         />
         {hoverRatio !== null && duration > 0 && (
           <>
             <div
-              className="absolute top-1/2 -translate-y-1/2 w-px h-5 bg-white/80 pointer-events-none"
+              className="absolute top-1/2 -translate-y-1/2 w-px h-4 bg-white/60 pointer-events-none"
               style={{ left: `${hoverRatio * 100}%` }}
             />
             <div
               className="absolute bottom-full mb-3 -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-0.5 rounded whitespace-nowrap pointer-events-none"
               style={{ left: `${hoverRatio * 100}%` }}
             >
-              {formatTime(hoverRatio * duration)}
+              {formatRelative(hoverRatio * duration - position)}
             </div>
           </>
         )}

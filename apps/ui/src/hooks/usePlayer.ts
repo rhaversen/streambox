@@ -34,6 +34,7 @@ export function usePlayer() {
   const [textTracks, setTextTracksState] = useState<TextTrackInfo[]>([])
   const [audioTracks, setAudioTracks] = useState<AudioTrackInfo[]>([])
   const [videoError, setVideoError] = useState<string | null>(null)
+  const [isBuffering, setIsBuffering] = useState(false)
   const osdTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const hlsRef = useRef<Hls | null>(null)
@@ -50,50 +51,110 @@ export function usePlayer() {
     const url = streamInfo.streamUrl
     if (!video) return
 
-    hlsRef.current?.destroy()
-    hlsRef.current = null
-    video.removeAttribute('src')
-    video.load()
     setVideoError(null)
-    setPosition(streamInfo.streamStartTime ?? 0)
+    setPosition(0)
     setLocalDuration(0)
+    setBuffered([])
     setVideoPaused(true)
     setAudioTracks([])
+    setIsBuffering(false)
 
-    if (!url) return
+    if (!url) {
+      hlsRef.current?.destroy()
+      hlsRef.current = null
+      video.removeAttribute('src')
+      video.load()
+      return
+    }
+
+    const hlsKey = url.match(/\/api\/hls\/([^/]+)\//)?.[1]
+    let progressInterval: ReturnType<typeof setInterval> | undefined
+    if (hlsKey) {
+      const fetchProgress = () => {
+        fetch(`/api/hls/${hlsKey}/progress`)
+          .then(r => r.ok ? r.json() as Promise<{ cachedSeconds: number }> : null)
+          .then(data => { if (data) setBuffered([{ start: 0, end: data.cachedSeconds }]) })
+          .catch(() => {})
+      }
+      fetchProgress()
+      progressInterval = setInterval(fetchProgress, 2000)
+    }
 
     if (Hls.isSupported()) {
-      const hls = new Hls({ enableWorker: false, startPosition: 0, backBufferLength: 90 })
-      hlsRef.current = hls
-      hls.loadSource(url)
-      hls.attachMedia(video)
-      const syncAudioTracks = () => {
-        const tracks = hls.audioTracks
-        const current = hls.audioTrack
-        setAudioTracks(tracks.map((t, i) => ({
-          id: i,
-          name: t.name || `Track ${i + 1}`,
-          lang: t.lang,
-          active: i === current,
-        })))
-      }
-      hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, syncAudioTracks)
-      hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, syncAudioTracks)
-      hls.once(Hls.Events.MANIFEST_PARSED, () => { void video.play(); syncAudioTracks() })
-      hls.on(Hls.Events.ERROR, (_e, data) => {
-        console.error('[hls.js]', data.type, data.details, data.fatal, data.error)
-        if (data.fatal) setVideoError(`HLS ${data.type}: ${data.details}`)
-      })
+      attachHls(url)
     } else {
+      hlsRef.current?.destroy()
+      hlsRef.current = null
+      video.removeAttribute('src')
+      video.load()
       video.src = url
       void video.play()
     }
 
     return () => {
+      clearInterval(progressInterval)
       hlsRef.current?.destroy()
       hlsRef.current = null
     }
   }, [streamInfo.streamUrl])
+
+  function attachHls(url: string, startPosition?: number): void {
+    const video = videoRef.current
+    if (!video) return
+    hlsRef.current?.destroy()
+    hlsRef.current = null
+    video.removeAttribute('src')
+    const hls = new Hls({
+      enableWorker: false,
+      maxBufferLength: 8,
+      maxMaxBufferLength: 16,
+      backBufferLength: 8,
+      lowLatencyMode: false,
+      fragLoadingMaxRetry: 6,
+      fragLoadingRetryDelay: 1000,
+      manifestLoadingMaxRetry: 10,
+      manifestLoadingRetryDelay: 2000,
+      startPosition: startPosition ?? -1,
+    })
+    hlsRef.current = hls
+    hls.loadSource(url)
+    hls.attachMedia(video)
+    const syncAudioTracks = () => {
+      setAudioTracks(hls.audioTracks.map((t, i) => ({
+        id: i,
+        name: t.name || `Track ${i + 1}`,
+        lang: t.lang,
+        active: i === hls.audioTrack,
+      })))
+    }
+    hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, syncAudioTracks)
+    hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, syncAudioTracks)
+    hls.once(Hls.Events.MANIFEST_PARSED, () => {
+      video.play().catch(() => { /* autoplay blocked; user can press play */ })
+      syncAudioTracks()
+    })
+    let mediaRecovered = false
+    hls.on(Hls.Events.ERROR, (_e, data) => {
+      console.error(`[hls] ${data.details} fatal=${data.fatal}`, data.error?.message ?? '')
+      if (!data.fatal) return
+      if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+        hls.startLoad()
+      } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+        if (!mediaRecovered) {
+          mediaRecovered = true
+          hls.recoverMediaError()
+        } else {
+          hls.destroy()
+          hlsRef.current = null
+          setVideoError(`HLS ${data.type}: ${data.details}`)
+        }
+      } else {
+        hls.destroy()
+        hlsRef.current = null
+        setVideoError(`HLS ${data.type}: ${data.details}`)
+      }
+    })
+  }
 
   // Video element event listeners
   useEffect(() => {
@@ -123,6 +184,10 @@ export function usePlayer() {
       setTextTracksState(tt)
     }
 
+    const onSeeking = () => setIsBuffering(true)
+    const onSeeked = () => setIsBuffering(false)
+    const onWaiting = () => setIsBuffering(true)
+
     video.textTracks.addEventListener('addtrack', refreshTextTracks)
     video.textTracks.addEventListener('removetrack', refreshTextTracks)
     video.addEventListener('timeupdate', onTimeUpdate)
@@ -132,6 +197,9 @@ export function usePlayer() {
     video.addEventListener('ended', onEnded)
     video.addEventListener('volumechange', onVolumeChange)
     video.addEventListener('error', onError)
+    video.addEventListener('seeking', onSeeking)
+    video.addEventListener('seeked', onSeeked)
+    video.addEventListener('waiting', onWaiting)
     return () => {
       video.textTracks.removeEventListener('addtrack', refreshTextTracks)
       video.textTracks.removeEventListener('removetrack', refreshTextTracks)
@@ -142,14 +210,13 @@ export function usePlayer() {
       video.removeEventListener('ended', onEnded)
       video.removeEventListener('volumechange', onVolumeChange)
       video.removeEventListener('error', onError)
+      video.removeEventListener('seeking', onSeeking)
+      video.removeEventListener('seeked', onSeeked)
+      video.removeEventListener('waiting', onWaiting)
     }
   })
 
   const duration = streamInfo.duration > 0 ? streamInfo.duration : localDuration
-
-  const buffered: BufferedRange[] = streamInfo.transcodedEnd !== undefined
-    ? [{ start: 0, end: streamInfo.transcodedEnd }]
-    : []
 
   function showOsd() {
     setOsdVisible(true)
@@ -164,23 +231,11 @@ export function usePlayer() {
   function pause() { videoRef.current?.pause(); showOsd() }
   function resume() { void videoRef.current?.play(); showOsd() }
 
-  function seek(contentPosition: number) {
+  function seek(absolutePosition: number) {
     const video = videoRef.current
     if (!video) return
-    const startTime = streamInfo.streamStartTime ?? 0
-    const videoTime = contentPosition - startTime
-    let isBuffered = false
-    for (let i = 0; i < video.buffered.length; i++) {
-      if (videoTime >= video.buffered.start(i) && videoTime <= video.buffered.end(i)) {
-        isBuffered = true
-        break
-      }
-    }
-    if (isBuffered) {
-      video.currentTime = videoTime
-    } else {
-      bridge.send({ type: 'SEEK_STREAM', payload: { position: contentPosition } })
-    }
+    setPosition(absolutePosition)
+    video.currentTime = absolutePosition
     showOsd()
   }
 
