@@ -1,4 +1,4 @@
-import { promises as fs } from 'fs'
+import { createReadStream, promises as fs } from 'fs'
 import { join } from 'path'
 import type { FastifyInstance } from 'fastify'
 import type { MediaStore } from '../media/MediaStore.js'
@@ -25,9 +25,11 @@ export function registerHlsRoutes(fastify: FastifyInstance, store: MediaStore): 
 
     await store.waitForFile(entry, filename)
 
-    const content = await fs.readFile(join(entry.dir, filename))
+    const filePath = join(entry.dir, filename)
+    const stat = await fs.stat(filePath)
+    const content = createReadStream(filePath)
     reply.header('Content-Type', filename.endsWith('.m3u8') ? 'application/vnd.apple.mpegurl' : 'video/mp2t')
-    reply.header('Content-Length', String(content.length))
+    reply.header('Content-Length', String(stat.size))
     reply.header('Cache-Control', 'no-cache')
     return reply.send(content)
   })
