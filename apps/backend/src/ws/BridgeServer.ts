@@ -5,6 +5,11 @@ import type { TMDB } from '../metadata/TMDB.js'
 import type { MediaStore } from '../media/MediaStore.js'
 import { log, error } from '../logger.js'
 
+function errorToSafeMessage(err: unknown): string {
+  if (err instanceof Error) return err.message
+  return String(err)
+}
+
 export class BridgeServer {
   private clients = new Set<import('ws').WebSocket>()
   private streamInfo: StreamInfo = {
@@ -37,8 +42,8 @@ export class BridgeServer {
           this.messageQueue = this.messageQueue
             .then(() => this.handleMessage(msg))
             .catch((err: unknown) => {
-              const message = err instanceof Error ? err.message : String(err)
-              error('[BridgeServer] handleMessage error:', err)
+              const message = errorToSafeMessage(err)
+              error(`[BridgeServer] handleMessage error: ${message}`)
               this.updateInfo({ loading: false, errorMessage: message })
             })
         } catch { /* ignore malformed */ }
