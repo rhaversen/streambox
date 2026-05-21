@@ -6,117 +6,59 @@ Environment assumptions: single-user, single-machine Electron app with one local
 
 ---
 
-## Critical Issues
+## Operating Decisions (Keep As-Is)
 
-### 1. HLS is configured as unbounded EVENT output
+These are intentional product/architecture choices and are not tracked as defects:
 
-`MediaStore` starts ffmpeg with:
-
-- `-hls_playlist_type event`
-- `-hls_list_size 0`
-
-This keeps appending segments for the entire playback and never trims the playlist window. For long titles, segment file count and disk usage grow continuously.
-
-**Fix:** For on-demand playback, emit VOD playlists (`-hls_playlist_type vod`) once the source is fully available, or run a sliding live-style window with `-hls_list_size <N>` and `-hls_flags delete_segments`.
-
----
-
-### 2. Playback pipeline has no source failover after selection
-
-`StreamResolver` returns a single candidate and `BridgeServer` attempts playback only for that chosen URL. If ffmpeg fails on that source (network flap, dead host, throttled endpoint), there is no automatic retry against the next-ranked candidate.
-
-**Fix:** Resolve and keep a ranked candidate list, then attempt sequential fallback when startup/transcode fails.
+1. HLS cache is permanent until user deletion.
+2. No automatic stream failover to alternate candidates.
+3. Browser-side cache remains disabled for manifest and segments (`Cache-Control: no-cache`); backend storage is the authoritative cache.
+4. WebSocket playback payload is trusted in local-only deployment; no runtime schema validation.
+5. No explicit ffmpeg shutdown interception on process exit.
+6. TMDB caching is deferred.
+7. Audio policy remains unchanged for now.
 
 ---
 
-## Significant Issues
+## Current Findings
 
-### 3. HLS segment endpoint reads full files into memory
+### 1. CORS policy should remain localhost-only
 
-`/api/hls/*` does `fs.readFile` and sends a full `Buffer` for each `.ts` segment. This allocates per-request buffers unnecessarily.
+Backend must only accept local origins in this deployment model.
 
-**Fix:** Stream files (`createReadStream`) or use static file serving to avoid full in-memory buffering.
-
----
-
-### 4. Audio is always forced to stereo
-
-ffmpeg args include `-ac 2`, which downmixes all multichannel sources to stereo.
-
-**Fix:** Remove hardcoded channel downmix and preserve source channel layout where possible.
+**Status:** Implemented. `index.ts` now allows localhost/127.0.0.1 origins and rejects others.
 
 ---
 
-### 5. Segment duration is short for on-demand workloads
+### 2. HLS segment responses should stream from disk
 
-HLS uses `-hls_time 4`. For local VOD playback, this still produces many files and extra filesystem churn versus a larger segment duration.
+HLS `.ts` and `.m3u8` responses should avoid full in-memory buffering.
 
-**Fix:** Use a VOD-oriented segment duration (commonly around 6 seconds) unless a lower target is required.
-
----
-
-### 6. WebSocket playback payload is trusted without runtime validation
-
-`BridgeServer` casts `JSON.parse(...)` directly to `BridgeMessage`, and `imdbId/season/episode` flow into provider URL construction. There is no runtime schema guard.
-
-**Fix:** Validate incoming payloads (e.g., imdb pattern, integer checks for season/episode) before using them in resolution/provider requests.
+**Status:** Implemented. `/api/hls/*` now streams with `createReadStream` and file-size based `Content-Length`.
 
 ---
 
-## Minor Issues
+### 3. Segment target duration should be tuned for local VOD
 
-### 7. No shutdown hook for active transcoding cleanup
+Local on-demand playback benefits from a larger segment duration than low-latency live defaults.
 
-Server startup creates and reuses media-cache entries, but there is no process shutdown handling to terminate active ffmpeg children and perform cleanup policy decisions on exit.
-
-**Fix:** Add `SIGINT`/`SIGTERM` handlers that stop active jobs and run explicit cache cleanup/retention logic.
+**Status:** Implemented. ffmpeg now uses `-hls_time 6`.
 
 ---
 
-### 8. Cache headers are not differentiated by artifact type
+### 4. Player should use larger forward buffer and worker parsing
 
-Manifest and segments are both served with `Cache-Control: no-cache`. Segment files are immutable once written and can be cached aggressively.
+Because backend delivery is local and fast, the player can maintain a larger forward buffer and offload parsing to hls.js worker.
 
-**Fix:** Keep manifest conservative (`no-cache`) and return long-lived immutable caching for completed `.ts` segments.
-
----
-
-### 9. TMDB requests are uncached
-
-Trending, search, and detail lookups are executed directly on each request with no in-memory TTL layer.
-
-**Fix:** Add bounded in-memory caching (per endpoint/key) with practical TTLs to reduce repeated external API load.
-
----
-
-### 10. CORS policy reflects arbitrary origins
-
-Backend registers CORS with `origin: true`, reflecting request origins.
-
-**Fix:** Restrict origins to local app endpoints (e.g., localhost/electron app origin).
-
----
-
-### 11. hls.js worker is disabled
-
-Player config sets `enableWorker: false`. This keeps parsing/demux work on the main thread.
-
-**Fix:** If Electron CSP allows blob workers, enable hls.js worker mode for better UI responsiveness.
+**Status:** Implemented. `usePlayer.ts` now sets `enableWorker: true`, `maxBufferLength: 60`, and `maxMaxBufferLength: 120`.
 
 ---
 
 ## Summary Table
 
-| # | Location | Severity | Issue |
-|---|---|---|---|
-| 1 | `MediaStore.ts` | **Critical** | EVENT playlist + unbounded list size causes unbounded segment growth |
-| 2 | `StreamResolver.ts` / `BridgeServer.ts` | **Critical** | No source fallback after selected stream fails |
-| 3 | `routes/hls.ts` | **Significant** | Segment responses are fully buffered in memory |
-| 4 | `MediaStore.ts` | **Significant** | Audio is forced to stereo downmix |
-| 5 | `MediaStore.ts` | **Significant** | Short segment duration increases file churn for VOD |
-| 6 | `BridgeServer.ts` / `Torrentio.ts` | **Significant** | No runtime validation of WebSocket playback payload |
-| 7 | `index.ts` | Minor | No process shutdown handling for active transcodes |
-| 8 | `routes/hls.ts` | Minor | Manifest and segments share same no-cache policy |
-| 9 | `metadata/TMDB.ts` | Minor | No API response caching |
-| 10 | `index.ts` | Minor | CORS reflects arbitrary origins |
-| 11 | `usePlayer.ts` | Minor | hls.js worker mode disabled |
+| # | Location | Priority | Item | Status |
+| --- | --- | --- | --- | --- |
+| 1 | `index.ts` | High | Restrict CORS to local origins | Implemented |
+| 2 | `routes/hls.ts` | High | Stream HLS files from disk | Implemented |
+| 3 | `MediaStore.ts` | Medium | Use 6s HLS segment duration | Implemented |
+| 4 | `usePlayer.ts` | Medium | Enable worker + raise forward buffers | Implemented |
