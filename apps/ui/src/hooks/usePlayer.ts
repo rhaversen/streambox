@@ -98,9 +98,9 @@ export function usePlayer() {
     video.removeAttribute('src')
     const hls = new Hls({
       enableWorker: true,
-      maxBufferLength: 8,
-      maxMaxBufferLength: 16,
-      backBufferLength: 8,
+      maxBufferLength: 6,
+      maxMaxBufferLength: 60,
+      backBufferLength: 60,
       lowLatencyMode: false,
       fragLoadingMaxRetry: 6,
       fragLoadingRetryDelay: 1000,
