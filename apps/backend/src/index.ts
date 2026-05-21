@@ -24,7 +24,26 @@ const fastify = Fastify({
     level: 'info',
   },
 })
-await fastify.register(fastifyCors, { origin: true })
+const allowedOrigins = new Set([
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:4000',
+  'http://127.0.0.1:4000',
+])
+
+await fastify.register(fastifyCors, {
+  origin: (origin, cb) => {
+    if (!origin) {
+      cb(null, true)
+      return
+    }
+    if (allowedOrigins.has(origin) || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+      cb(null, true)
+      return
+    }
+    cb(new Error('Origin not allowed by CORS'), false)
+  },
+})
 await fastify.register(fastifyWebsocket)
 
 const store = new MediaStore()
