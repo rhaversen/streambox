@@ -116,6 +116,18 @@ Range C (H..P) head reaches P
    (Segments stay in separate dirs — no file moves needed.)
 ```
 
+### Startup recovery for partial caches
+
+On backend startup, `MediaStore` should scan cache directories and restore not only complete entries, but also partially cached entries.
+
+For each partial entry:
+- Determine the cached head timecode from its existing playlist/segments.
+- Mark it as resumable (`paused`/`partial` state).
+- When resumed, start FFmpeg from that head timecode (`-ss <head>`) against the same source URL.
+- Continue HLS splitting into a new range directory and merge it into the entry timeline.
+
+This avoids restarting from 0 when a previous caching session was interrupted (app restart, crash, or manual stop).
+
 ---
 
 ## HLS Serving
@@ -144,7 +156,7 @@ This is the main open question requiring a front-end test before committing to t
 ## Implementation Phases
 
 ### Phase 1 — Current state (implemented)
-Single-range `MediaEntry`. Seek = full restart. No gap handling.
+Single-range `MediaEntry`. Seek = clamped to buffered range. No gap handling.
 
 ### Phase 2 — Multi-range MediaEntry
 - `MediaEntry` holds `Range[]`
