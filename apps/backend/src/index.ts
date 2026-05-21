@@ -54,7 +54,7 @@ const tmdb = new TMDB(TMDB_API_KEY)
 
 const bridge = new BridgeServer(resolver, tmdb, store)
 bridge.register(fastify)
-registerApiRoutes(fastify, tmdb)
+registerApiRoutes(fastify, tmdb, store)
 registerHlsRoutes(fastify, store)
 
 await fastify.listen({ port: Number(PORT), host: '0.0.0.0' })

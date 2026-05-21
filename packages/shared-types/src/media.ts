@@ -5,6 +5,16 @@ export interface StreamCandidate {
   codec: 'av1' | 'hevc' | 'h264' | 'unknown'
 }
 
+export interface DownloadInsight {
+  status: 'none' | 'running' | 'complete' | 'error'
+  cachedSeconds: number
+}
+
+export interface DownloadInsightsResponse {
+  imdbId: string
+  insights: Record<string, DownloadInsight>
+}
+
 export interface Episode {
   season: number
   episode: number

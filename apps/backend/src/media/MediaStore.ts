@@ -3,6 +3,7 @@ import { promises as fs } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { createRequire } from 'module'
+import type { DownloadInsight } from '@streambox/shared-types'
 import { log, warn, error } from '../logger.js'
 
 const _require = createRequire(import.meta.url)
@@ -158,6 +159,23 @@ export class MediaStore {
       total += parseFloat(match[1])
     }
     return total
+  }
+
+  async getDownloadInsight(key: string): Promise<DownloadInsight> {
+    const entry = this.entries.get(key)
+    if (!entry) {
+      return { status: 'none', cachedSeconds: 0 }
+    }
+    const cachedSeconds = await this.getCachedDuration(key)
+    return { status: entry.status, cachedSeconds }
+  }
+
+  async getInsightsForImdb(imdbId: string): Promise<Record<string, DownloadInsight>> {
+    const keys = [...this.entries.keys()].filter((key) => key === imdbId || key.startsWith(`${imdbId}_`))
+    const pairs = await Promise.all(
+      keys.map(async (key) => [key, await this.getDownloadInsight(key)] as const)
+    )
+    return Object.fromEntries(pairs)
   }
 
   async waitForFile(entry: MediaEntry, filename: string, timeoutMs = 120_000): Promise<void> {

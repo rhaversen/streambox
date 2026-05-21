@@ -2,12 +2,23 @@ import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useFocusable, FocusContext } from '@noriginmedia/norigin-spatial-navigation'
-import type { MediaItem, Show, Season } from '@streambox/shared-types'
+import type { DownloadInsight, DownloadInsightsResponse, MediaItem, Season } from '@streambox/shared-types'
 import { isShow } from '@streambox/shared-types'
 
 async function fetchDetail(imdbId: string): Promise<MediaItem> {
   const res = await fetch(`/api/detail/${imdbId}`)
   return res.json() as Promise<MediaItem>
+}
+
+async function fetchDownloads(imdbId: string): Promise<DownloadInsightsResponse> {
+  const res = await fetch(`/api/downloads/${imdbId}`)
+  return res.json() as Promise<DownloadInsightsResponse>
+}
+
+function toMediaKey(imdbId: string, season?: number, episode?: number): string {
+  return season !== undefined && episode !== undefined
+    ? `${imdbId}_s${String(season).padStart(2, '0')}e${String(episode).padStart(2, '0')}`
+    : imdbId
 }
 
 export function Detail() {
@@ -20,6 +31,14 @@ export function Detail() {
     queryKey: ['detail', imdbId],
     queryFn: () => fetchDetail(imdbId),
     enabled: !!imdbId,
+  })
+
+  const { data: downloads } = useQuery({
+    queryKey: ['downloads', imdbId],
+    queryFn: () => fetchDownloads(imdbId),
+    enabled: !!imdbId,
+    refetchInterval: 3000,
+    refetchIntervalInBackground: true,
   })
 
   if (!item) {
@@ -44,6 +63,8 @@ export function Detail() {
   const year = show?.firstAirDate.slice(0, 4) ?? movie?.releaseDate.slice(0, 4)
   const meta = [year, movie?.runtime ? `${movie.runtime}m` : null, ...item.genres.slice(0, 3)]
     .filter(Boolean).join(' · ')
+  const insights = downloads?.insights ?? {}
+  const movieDownload = movie ? insights[toMediaKey(imdbId)] : undefined
 
   return (
     <FocusContext.Provider value={focusKey}>
@@ -53,8 +74,8 @@ export function Detail() {
             className="absolute inset-0"
             style={{ backgroundImage: `url(${item.backdropPath})`, backgroundSize: 'cover', backgroundPosition: 'center top' }}
           >
-            <div className="absolute inset-0 bg-gradient-to-r from-black via-black/80 to-black/30" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/40" />
+            <div className="absolute inset-0 bg-linear-to-r from-black via-black/80 to-black/30" />
+            <div className="absolute inset-0 bg-linear-to-t from-black via-transparent to-black/40" />
           </div>
         )}
 
@@ -71,6 +92,12 @@ export function Detail() {
                 <PlayButton label="Play" onPress={() => handlePlay()} focusKey="PLAY_BTN" />
               )}
             </div>
+
+            {movieDownload && (
+              <div className="mb-6">
+                <DownloadPill download={movieDownload} />
+              </div>
+            )}
 
             {show && (
               <>
@@ -89,7 +116,7 @@ export function Detail() {
                     ))}
                   </div>
                 )}
-                {currentSeason && <EpisodeList season={currentSeason} onPlay={handlePlay} />}
+                {currentSeason && <EpisodeList imdbId={imdbId} insights={insights} season={currentSeason} onPlay={handlePlay} />}
               </>
             )}
           </div>
@@ -118,7 +145,17 @@ function PlayButton({ label, onPress, focusKey }: { label: string; onPress: () =
   )
 }
 
-function EpisodeList({ season, onPlay }: { season: Season; onPlay: (s: number, e: number) => void }) {
+function EpisodeList({
+  imdbId,
+  insights,
+  season,
+  onPlay,
+}: {
+  imdbId: string
+  insights: Record<string, DownloadInsight>
+  season: Season
+  onPlay: (s: number, e: number) => void
+}) {
   return (
     <div className="min-h-0 flex-1 flex flex-col">
       <div className="text-white/40 text-tv-sm uppercase tracking-widest mb-3">
@@ -132,6 +169,7 @@ function EpisodeList({ season, onPlay }: { season: Season; onPlay: (s: number, e
             episode={ep.episode}
             title={ep.title}
             runtime={ep.runtime}
+            download={insights[toMediaKey(imdbId, season.seasonNumber, ep.episode)]}
             onPlay={onPlay}
           />
         ))}
@@ -145,12 +183,14 @@ function EpisodeRow({
   episode,
   title,
   runtime,
+  download,
   onPlay,
 }: {
   season: number
   episode: number
   title: string
   runtime?: number
+  download?: DownloadInsight
   onPlay: (s: number, e: number) => void
 }) {
   const fk = `EP-${season}-${episode}`
@@ -167,11 +207,44 @@ function EpisodeRow({
         {String(episode).padStart(2, '0')}
       </span>
       <span className="text-tv-sm font-medium flex-1 truncate">{title}</span>
+      {download && <DownloadPill download={download} compact focused={focused} />}
       {runtime !== undefined && (
         <span className={`text-tv-sm shrink-0 tabular-nums ${focused ? 'text-black/40' : 'text-white/35'}`}>
           {runtime}m
         </span>
       )}
     </div>
+  )
+}
+
+function DownloadPill({
+  download,
+  compact = false,
+  focused = false,
+}: {
+  download: DownloadInsight
+  compact?: boolean
+  focused?: boolean
+}) {
+  const status = download.status === 'none' ? 'not started' : download.status
+  const cached = download.cachedSeconds > 0 ? ` · ${Math.floor(download.cachedSeconds / 60)}m cached` : ''
+  const label = `${status}${cached}`
+
+  return (
+    <span
+      className={`rounded-full px-3 py-1 text-xs uppercase tracking-wide ${compact ? '' : 'text-tv-sm'} ${
+        focused
+          ? 'bg-black/15 text-black/70'
+          : download.status === 'running'
+            ? 'bg-emerald-500/20 text-emerald-300'
+            : download.status === 'complete'
+              ? 'bg-sky-500/20 text-sky-300'
+              : download.status === 'error'
+                ? 'bg-red-500/20 text-red-300'
+                : 'bg-white/10 text-white/60'
+      }`}
+    >
+      {label}
+    </span>
   )
 }
