@@ -125,7 +125,7 @@ export class MediaStore {
       ...videoArgs,
       ...audioArgs,
       '-f', 'hls',
-      '-hls_time', '4',
+      '-hls_time', '6',
       '-hls_list_size', '0',
       '-hls_flags', 'independent_segments',
       '-hls_playlist_type', 'event',
