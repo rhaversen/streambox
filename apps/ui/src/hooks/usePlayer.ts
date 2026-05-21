@@ -97,7 +97,7 @@ export function usePlayer() {
     hlsRef.current = null
     video.removeAttribute('src')
     const hls = new Hls({
-      enableWorker: false,
+      enableWorker: true,
       maxBufferLength: 8,
       maxMaxBufferLength: 16,
       backBufferLength: 8,
