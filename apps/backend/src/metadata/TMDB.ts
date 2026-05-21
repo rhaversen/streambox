@@ -3,64 +3,206 @@ import type { AxiosRequestConfig } from 'axios'
 import { createGunzip, constants as zlibConstants } from 'zlib'
 import type { Show, Movie, Episode, Season, MediaCard } from '@streambox/shared-types'
 
+// Items in /trending/movie/week results
 interface TMDBTrendingMovie {
   id: number
   title: string
+  original_title: string
+  overview: string
   poster_path: string | null
   backdrop_path: string | null
   release_date: string
-  overview: string
+  genre_ids: number[]
+  popularity: number
+  vote_average: number
+  vote_count: number
+  original_language: string
+  adult: boolean
+  video: boolean
+  media_type: string
 }
 
+// Items in /trending/tv/week results
 interface TMDBTrendingSeries {
   id: number
   name: string
+  original_name: string
+  overview: string
   poster_path: string | null
   backdrop_path: string | null
   first_air_date: string
-  overview: string
+  genre_ids: number[]
+  popularity: number
+  vote_average: number
+  vote_count: number
+  origin_country: string[]
+  original_language: string
+  adult: boolean
+  media_type: string
 }
 
-interface TMDBShowResult {
+// Items in /find/{external_id} tv_results
+interface TMDBFindTVResult {
+  id: number
+  name: string
+  original_name: string
+  overview: string
+  poster_path: string | null
+  backdrop_path: string | null
+  first_air_date: string
+  genre_ids: number[]
+  popularity: number
+  vote_average: number
+  vote_count: number
+  origin_country: string[]
+  original_language: string
+  adult: boolean
+  media_type: string
+}
+
+// Response for /tv/{series_id}
+interface TMDBTVDetails {
+  id: number
+  name: string
+  original_name: string
+  overview: string
+  poster_path: string | null
+  backdrop_path: string | null
+  first_air_date: string
+  last_air_date: string
+  genres: Array<{ id: number; name: string }>
+  seasons: TMDBSeasonListItem[]
+  number_of_episodes: number
+  number_of_seasons: number
+  status: string
+  tagline: string
+  popularity: number
+  vote_average: number
+  vote_count: number
+  in_production: boolean
+  origin_country: string[]
+  original_language: string
+  adult: boolean
+}
+
+// Season items within the /tv/{series_id} response (no episodes array)
+interface TMDBSeasonListItem {
   id: number
   name: string
   overview: string
+  air_date: string | null
+  episode_count: number
   poster_path: string | null
-  backdrop_path: string | null
-  first_air_date: string
-  genres: Array<{ id: number; name: string }>
+  season_number: number
+  vote_average: number
 }
 
-interface TMDBMovieResult {
+// Items in /find/{external_id} movie_results
+interface TMDBFindMovieResult {
   id: number
   title: string
+  original_title: string
+  overview: string
+  poster_path: string | null
+  backdrop_path: string | null
+  release_date: string
+  genre_ids: number[]
+  popularity: number
+  vote_average: number
+  vote_count: number
+  original_language: string
+  adult: boolean
+  video: boolean
+  media_type: string
+}
+
+// Response for /movie/{movie_id}
+interface TMDBMovieDetails {
+  id: number
+  title: string
+  original_title: string
   overview: string
   poster_path: string | null
   backdrop_path: string | null
   release_date: string
   genres: Array<{ id: number; name: string }>
   runtime: number | null
-  imdb_id: string
+  imdb_id: string | null
+  popularity: number
+  vote_average: number
+  vote_count: number
+  original_language: string
+  adult: boolean
+  video: boolean
+  status: string
+  tagline: string
+  budget: number
+  revenue: number
+  homepage: string | null
+  origin_country: string[]
 }
 
+// Episodes within /tv/{series_id}/season/{season_number} response
 interface TMDBEpisode {
-  episode_number: number
+  id: number
   name: string
   overview: string
-  air_date: string
-  still_path: string | null
+  air_date: string | null
+  episode_number: number
+  episode_type: string
+  production_code: string
   runtime: number | null
-}
-
-interface TMDBSeason {
   season_number: number
-  episode_count: number
-  episodes: TMDBEpisode[]
-  poster_path: string | null
+  show_id: number
+  still_path: string | null
+  vote_average: number
+  vote_count: number
 }
 
+// Response for /tv/{series_id}/season/{season_number}
+interface TMDBSeasonDetails {
+  _id: string
+  id: number
+  name: string
+  overview: string
+  air_date: string | null
+  poster_path: string | null
+  season_number: number
+  vote_average: number
+  episodes: TMDBEpisode[]
+}
+
+// Response for /movie/{id}/external_ids and /tv/{id}/external_ids
 interface TMDBExternalIds {
+  id: number
   imdb_id: string | null
+  wikidata_id: string | null
+  facebook_id: string | null
+  instagram_id: string | null
+  twitter_id: string | null
+}
+
+// Items in /search/multi results
+interface TMDBMultiSearchResult {
+  id: number
+  media_type: 'movie' | 'tv' | 'person'
+  title?: string
+  original_title?: string
+  release_date?: string
+  video?: boolean
+  name?: string
+  original_name?: string
+  first_air_date?: string
+  origin_country?: string[]
+  overview: string
+  poster_path: string | null
+  backdrop_path: string | null
+  genre_ids: number[]
+  popularity: number
+  vote_average: number
+  vote_count: number
+  original_language: string
+  adult: boolean
 }
 
 const IMAGE_BASE = 'https://image.tmdb.org/t/p/w500'
@@ -96,87 +238,81 @@ export class TMDB {
   }
 
   async getShowByImdbId(imdbId: string): Promise<Show | null> {
-    const findRes = await this.tmdbGet<{ tv_results: TMDBShowResult[] }>(
+    const findRes = await this.tmdbGet<{ tv_results: TMDBFindTVResult[] }>(
       `${this.baseUrl}/find/${imdbId}`,
       { params: { ...this.params, external_source: 'imdb_id' } }
     )
     const result = findRes.tv_results[0]
     if (!result) return null
 
-    const seasonsRes = await this.tmdbGet<{ seasons: TMDBSeason[] }>(
+    const tvDetails = await this.tmdbGet<TMDBTVDetails>(
       `${this.baseUrl}/tv/${result.id}`,
       { params: this.params }
     )
 
     const seasons: Season[] = await Promise.all(
-      seasonsRes.seasons
+      tvDetails.seasons
         .filter((s) => s.season_number > 0)
-        .map((s) => this.fetchSeason(result.id, s.season_number, s.poster_path))
+        .map((s) => this.fetchSeason(result.id, s.season_number))
     )
 
     return {
       imdbId,
-      tmdbId: result.id,
       title: result.name,
       overview: result.overview,
       posterPath: result.poster_path ? IMAGE_BASE + result.poster_path : undefined,
       backdropPath: result.backdrop_path ? IMAGE_BASE + result.backdrop_path : undefined,
       firstAirDate: result.first_air_date,
-      genres: (result.genres ?? []).map((g) => g.name),
+      genres: tvDetails.genres.map((g) => g.name),
       seasons,
     }
   }
 
-  private async fetchSeason(tmdbShowId: number, seasonNumber: number, posterPath: string | null): Promise<Season> {
-    const res = await this.tmdbGet<TMDBSeason>(
+  private async fetchSeason(tmdbShowId: number, seasonNumber: number): Promise<Season> {
+    const res = await this.tmdbGet<TMDBSeasonDetails>(
       `${this.baseUrl}/tv/${tmdbShowId}/season/${seasonNumber}`,
       { params: this.params }
     )
     const episodes: Episode[] = res.episodes.map((e) => ({
-      tmdbId: tmdbShowId,
       season: seasonNumber,
       episode: e.episode_number,
       title: e.name,
-      overview: e.overview,
-      airDate: e.air_date,
-      stillPath: e.still_path ? IMAGE_BASE + e.still_path : undefined,
       runtime: e.runtime ?? undefined,
     }))
     return {
       seasonNumber,
       episodeCount: episodes.length,
       episodes,
-      posterPath: posterPath ? IMAGE_BASE + posterPath : undefined,
     }
   }
 
   async getMovieByImdbId(imdbId: string): Promise<Movie | null> {
-    const findRes = await this.tmdbGet<{ movie_results: TMDBMovieResult[] }>(
+    const findRes = await this.tmdbGet<{ movie_results: TMDBFindMovieResult[] }>(
       `${this.baseUrl}/find/${imdbId}`,
       { params: { ...this.params, external_source: 'imdb_id' } }
     )
     const result = findRes.movie_results[0]
     if (!result) return null
 
+    const details = await this.tmdbGet<TMDBMovieDetails>(
+      `${this.baseUrl}/movie/${result.id}`,
+      { params: this.params }
+    )
+
     return {
       imdbId,
-      tmdbId: result.id,
       title: result.title,
       overview: result.overview,
       posterPath: result.poster_path ? IMAGE_BASE + result.poster_path : undefined,
       backdropPath: result.backdrop_path ? IMAGE_BASE + result.backdrop_path : undefined,
       releaseDate: result.release_date,
-      genres: (result.genres ?? []).map((g) => g.name),
-      runtime: result.runtime ?? undefined,
+      genres: details.genres.map((g) => g.name),
+      runtime: details.runtime ?? undefined,
     }
   }
 
   async searchMulti(query: string): Promise<MediaCard[]> {
-    const res = await this.tmdbGet<{ results: Array<{
-      id: number; media_type: string; name?: string; title?: string
-      poster_path?: string; backdrop_path?: string
-      release_date?: string; first_air_date?: string; overview?: string
-    }> }>(
+    const res = await this.tmdbGet<{ results: TMDBMultiSearchResult[] }>(
       `${this.baseUrl}/search/multi`,
       { params: { ...this.params, query } }
     )
@@ -191,7 +327,6 @@ export class TMDB {
       if (!imdbId) continue
       cards.push({
         imdbId,
-        tmdbId: item.id,
         title: item.media_type === 'tv' ? (item.name ?? '') : (item.title ?? ''),
         posterPath: item.poster_path ? IMAGE_BASE + item.poster_path : undefined,
         backdropPath: item.backdrop_path ? IMAGE_BASE + item.backdrop_path : undefined,
@@ -219,7 +354,6 @@ export class TMDB {
         if (!imdbId) return null
         return {
           imdbId,
-          tmdbId: item.id,
           title: item.title,
           posterPath: item.poster_path ? IMAGE_BASE + item.poster_path : undefined,
           backdropPath: item.backdrop_path ? IMAGE_BASE + item.backdrop_path : undefined,
@@ -248,7 +382,6 @@ export class TMDB {
         if (!imdbId) return null
         return {
           imdbId,
-          tmdbId: item.id,
           title: item.name,
           posterPath: item.poster_path ? IMAGE_BASE + item.poster_path : undefined,
           backdropPath: item.backdrop_path ? IMAGE_BASE + item.backdrop_path : undefined,
