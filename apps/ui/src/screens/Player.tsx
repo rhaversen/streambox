@@ -6,7 +6,7 @@ import { PlayerOSD } from '../components/PlayerOSD.js'
 export function Player() {
   const { imdbId, season, episode } = useParams<{ imdbId: string; season?: string; episode?: string }>()
   const { streamInfo, videoPaused, position, duration, osdVisible, videoRef, play, pause, resume, seek, showOsd,
-    volume, muted, textTracks, audioTracks, buffered, videoError, isBuffering, setVolume, toggleMute, selectAudioTrack,
+    volume, muted, audioTracks, buffered, videoError, isBuffering, setVolume, toggleMute, selectAudioTrack,
   } = usePlayer()
   const navigate = useNavigate()
   const sentRef = useRef<string | null>(null)
@@ -68,17 +68,14 @@ export function Player() {
         visible={osdVisible}
         volume={volume}
         muted={muted}
-        textTracks={textTracks}
         audioTracks={audioTracks}
         buffered={buffered}
-        videoError={videoError}
         onSeek={seek}
         onPlayPause={() => videoPaused ? resume() : pause()}
         onRewind={() => seek(Math.max(0, position - 10))}
         onForward={() => seek(position + 30)}
         onVolumeChange={setVolume}
         onToggleMute={toggleMute}
-        onSelectTextTrack={selectTextTrack}
         onSelectAudioTrack={selectAudioTrack}
       />
 

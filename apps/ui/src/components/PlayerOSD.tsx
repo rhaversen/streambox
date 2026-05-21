@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import type { JSX } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Play, Pause, RotateCcw, RotateCw, Volume2, VolumeX, Captions, Music, AlertCircle } from 'lucide-react'
+import { Play, Pause, RotateCcw, RotateCw, Volume2, VolumeX, Music } from 'lucide-react'
 import { ProgressBar } from './ProgressBar.js'
-import type { TextTrackInfo, AudioTrackInfo, BufferedRange } from '../hooks/usePlayer.js'
+import type { AudioTrackInfo, BufferedRange } from '../hooks/usePlayer.js'
 
 interface PlayerOSDProps {
   title: string
@@ -14,22 +14,19 @@ interface PlayerOSDProps {
   visible: boolean
   volume: number
   muted: boolean
-  textTracks: TextTrackInfo[]
   audioTracks: AudioTrackInfo[]
   buffered?: BufferedRange[]
-  videoError: string | null
   onSeek?: (position: number) => void
   onPlayPause: () => void
   onRewind: () => void
   onForward: () => void
   onVolumeChange: (v: number) => void
   onToggleMute: () => void
-  onSelectTextTrack: (index: number | null) => void
   onSelectAudioTrack: (id: number) => void
 }
 
 function TrackSelector({
-  icon = <Captions size={16} />,
+  icon,
   items,
   onSelect,
   nullable = true,
@@ -81,18 +78,12 @@ function TrackSelector({
 
 export function PlayerOSD({
   title, episode, videoPaused, position, duration,
-  visible, volume, muted, textTracks, audioTracks, buffered, videoError,
+  visible, volume, muted, audioTracks, buffered,
   onSeek, onPlayPause, onRewind, onForward,
-  onVolumeChange, onToggleMute, onSelectTextTrack, onSelectAudioTrack,
+  onVolumeChange, onToggleMute, onSelectAudioTrack,
 }: PlayerOSDProps) {
   const isPlaying = !videoPaused
   const effectiveVolume = muted ? 0 : volume
-
-  const subtitleItems = textTracks.map((t) => ({
-    key: t.index,
-    label: t.label || t.language || `Track ${t.index + 1}`,
-    active: t.active,
-  }))
 
   const audioItems = audioTracks.map((t) => ({
     key: t.id,
@@ -153,19 +144,8 @@ export function PlayerOSD({
               onSelect={(key) => key !== null && onSelectAudioTrack(Number(key))}
               nullable={false}
             />
-
-            <TrackSelector
-              items={subtitleItems}
-              onSelect={(key) => onSelectTextTrack(key === null ? null : Number(key))}
-            />
           </div>
 
-          {videoError && (
-            <div className="flex items-center gap-2 mt-3 text-red-300 text-tv-sm">
-              <AlertCircle size={16} />
-              <span>{videoError}</span>
-            </div>
-          )}
         </motion.div>
       )}
     </AnimatePresence>

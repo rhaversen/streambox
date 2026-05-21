@@ -3,14 +3,6 @@ import Hls from 'hls.js'
 import { bridge } from '../ws/bridge.js'
 import { usePlayerStore } from '../store/playerStore.js'
 
-export interface TextTrackInfo {
-  index: number
-  label: string
-  language: string
-  kind: string
-  active: boolean
-}
-
 export interface AudioTrackInfo {
   id: number
   name: string
@@ -31,8 +23,8 @@ export function usePlayer() {
   const [osdVisible, setOsdVisible] = useState(false)
   const [volume, setVolumeState] = useState(1)
   const [muted, setMutedState] = useState(false)
-  const [textTracks, setTextTracksState] = useState<TextTrackInfo[]>([])
   const [audioTracks, setAudioTracks] = useState<AudioTrackInfo[]>([])
+  const [buffered, setBuffered] = useState<BufferedRange[]>([])
   const [videoError, setVideoError] = useState<string | null>(null)
   const [isBuffering, setIsBuffering] = useState(false)
   const osdTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -161,11 +153,11 @@ export function usePlayer() {
     const video = videoRef.current
     if (!video) return
 
-    const onTimeUpdate = () => setPosition(video.currentTime + (streamInfo.streamStartTime ?? 0))
+    const onTimeUpdate = () => setPosition(video.currentTime)
     const onDurationChange = () => {
       if (isFinite(video.duration) && video.duration > 0) setLocalDuration(video.duration)
     }
-    const onPlaying = () => { setVideoPaused(false); setVideoError(null) }
+    const onPlaying = () => { setVideoPaused(false); setVideoError(null); setIsBuffering(false) }
     const onPause = () => setVideoPaused(true)
     const onEnded = () => bridge.send({ type: 'NEXT_EPISODE', payload: {} })
     const onVolumeChange = () => { setVolumeState(video.volume); setMutedState(video.muted) }
@@ -173,23 +165,9 @@ export function usePlayer() {
       const err = video.error
       if (err) setVideoError(`MediaError ${err.code}: ${err.message || mediaErrorMessage(err.code)}`)
     }
-    const refreshTextTracks = () => {
-      const tt: TextTrackInfo[] = []
-      for (let i = 0; i < video.textTracks.length; i++) {
-        const t = video.textTracks[i]!
-        if (t.kind === 'subtitles' || t.kind === 'captions') {
-          tt.push({ index: i, label: t.label || `Track ${i + 1}`, language: t.language, kind: t.kind, active: t.mode === 'showing' })
-        }
-      }
-      setTextTracksState(tt)
-    }
-
     const onSeeking = () => setIsBuffering(true)
     const onSeeked = () => setIsBuffering(false)
     const onWaiting = () => setIsBuffering(true)
-
-    video.textTracks.addEventListener('addtrack', refreshTextTracks)
-    video.textTracks.addEventListener('removetrack', refreshTextTracks)
     video.addEventListener('timeupdate', onTimeUpdate)
     video.addEventListener('durationchange', onDurationChange)
     video.addEventListener('playing', onPlaying)
@@ -201,8 +179,6 @@ export function usePlayer() {
     video.addEventListener('seeked', onSeeked)
     video.addEventListener('waiting', onWaiting)
     return () => {
-      video.textTracks.removeEventListener('addtrack', refreshTextTracks)
-      video.textTracks.removeEventListener('removetrack', refreshTextTracks)
       video.removeEventListener('timeupdate', onTimeUpdate)
       video.removeEventListener('durationchange', onDurationChange)
       video.removeEventListener('playing', onPlaying)
@@ -214,7 +190,7 @@ export function usePlayer() {
       video.removeEventListener('seeked', onSeeked)
       video.removeEventListener('waiting', onWaiting)
     }
-  })
+  }, [])
 
   const duration = streamInfo.duration > 0 ? streamInfo.duration : localDuration
 
@@ -252,15 +228,6 @@ export function usePlayer() {
     video.muted = !video.muted
   }
 
-  function selectTextTrack(index: number | null) {
-    const video = videoRef.current
-    if (!video) return
-    for (let i = 0; i < video.textTracks.length; i++) {
-      video.textTracks[i]!.mode = i === index ? 'showing' : 'disabled'
-    }
-    setTextTracksState((prev) => prev.map((t) => ({ ...t, active: t.index === index })))
-  }
-
   function selectAudioTrack(id: number) {
     if (hlsRef.current) hlsRef.current.audioTrack = id
   }
@@ -268,9 +235,9 @@ export function usePlayer() {
   return {
     streamInfo, videoPaused, position, duration,
     osdVisible, videoRef,
-    volume, muted, textTracks, audioTracks, buffered, videoError,
+    volume, muted, audioTracks, buffered, videoError, isBuffering,
     play, pause, resume, seek, showOsd,
-    setVolume, toggleMute, selectTextTrack, selectAudioTrack,
+    setVolume, toggleMute, selectAudioTrack,
   }
 }
 
