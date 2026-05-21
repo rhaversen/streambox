@@ -4,11 +4,12 @@ import { useNavigate } from 'react-router-dom'
 import { FocusContext, useFocusable } from '@noriginmedia/norigin-spatial-navigation'
 import { ContentRow } from '../components/ContentRow.js'
 import type { MediaCard } from '@streambox/shared-types'
+import axios from 'axios'
 
 async function search(query: string): Promise<MediaCard[]> {
   if (!query) return []
-  const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`)
-  return res.json() as Promise<MediaCard[]>
+  const { data } = await axios.get(`/api/search?q=${encodeURIComponent(query)}`)
+  return data as Promise<MediaCard[]>
 }
 
 export function Browse() {

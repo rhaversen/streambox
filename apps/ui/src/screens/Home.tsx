@@ -3,15 +3,16 @@ import { useNavigate } from 'react-router-dom'
 import { FocusContext, useFocusable } from '@noriginmedia/norigin-spatial-navigation'
 import { ContentRow } from '../components/ContentRow.js'
 import type { MediaCard } from '@streambox/shared-types'
+import axios from 'axios'
 
 async function fetchTrendingMovies(): Promise<MediaCard[]> {
-  const res = await fetch('/api/trending/movies')
-  return res.json() as Promise<MediaCard[]>
+  const { data } = await axios.get('/api/trending/movies')
+  return data
 }
 
 async function fetchTrendingSeries(): Promise<MediaCard[]> {
-  const res = await fetch('/api/trending/series')
-  return res.json() as Promise<MediaCard[]>
+  const { data } = await axios.get('/api/trending/series')
+  return data
 }
 
 export function Home() {

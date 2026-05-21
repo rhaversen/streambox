@@ -4,15 +4,16 @@ import { useQuery } from '@tanstack/react-query'
 import { useFocusable, FocusContext } from '@noriginmedia/norigin-spatial-navigation'
 import type { DownloadInsight, DownloadInsightsResponse, MediaItem, Season } from '@streambox/shared-types'
 import { isShow } from '@streambox/shared-types'
+import axios from 'axios'
 
 async function fetchDetail(imdbId: string): Promise<MediaItem> {
-  const res = await fetch(`/api/detail/${imdbId}`)
-  return res.json() as Promise<MediaItem>
+  const { data } = await axios.get(`/api/detail/${imdbId}`)
+  return data
 }
 
 async function fetchDownloads(imdbId: string): Promise<DownloadInsightsResponse> {
-  const res = await fetch(`/api/downloads/${imdbId}`)
-  return res.json() as Promise<DownloadInsightsResponse>
+  const { data } = await axios.get(`/api/downloads/${imdbId}`)
+  return data
 }
 
 function toMediaKey(imdbId: string, season?: number, episode?: number): string {

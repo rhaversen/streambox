@@ -13,6 +13,7 @@
     "@noriginmedia/norigin-spatial-navigation": "^3.1.0",
     "@streambox/shared-types": "workspace:*",
     "@tanstack/react-query": "^5.100.10",
+    "axios": "^1.16.1",
     "framer-motion": "^12.39.0",
     "hls.js": "^1.6.16",
     "lucide-react": "^1.16.0",

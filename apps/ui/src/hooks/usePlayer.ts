@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import Hls from 'hls.js'
 import { bridge } from '../ws/bridge.js'
 import { usePlayerStore } from '../store/playerStore.js'
+import axios from 'axios'
 
 export interface AudioTrackInfo {
   id: number
@@ -62,11 +63,13 @@ export function usePlayer() {
     const hlsKey = url.match(/\/api\/hls\/([^/]+)\//)?.[1]
     let progressInterval: ReturnType<typeof setInterval> | undefined
     if (hlsKey) {
-      const fetchProgress = () => {
-        fetch(`/api/hls/${hlsKey}/progress`)
-          .then(r => r.ok ? r.json() as Promise<{ cachedSeconds: number }> : null)
-          .then(data => { if (data) setBuffered([{ start: 0, end: data.cachedSeconds }]) })
-          .catch(() => {})
+      const fetchProgress = async () => {
+        try {
+          const { data } = await axios.get(`/api/hls/${hlsKey}/progress`)
+          return data
+        } catch {
+          return null
+        }
       }
       fetchProgress()
       progressInterval = setInterval(fetchProgress, 2000)
