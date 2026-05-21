@@ -1,6 +1,5 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query'
-import { FocusProvider } from './components/FocusProvider.js'
 import { Home } from './screens/Home.js'
 import { Browse } from './screens/Browse.js'
 import { Detail } from './screens/Detail.js'
@@ -12,7 +11,6 @@ const queryClient = new QueryClient()
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <FocusProvider>
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Home />} />
@@ -22,7 +20,6 @@ export function App() {
             <Route path="/settings" element={<Settings />} />
           </Routes>
         </BrowserRouter>
-      </FocusProvider>
     </QueryClientProvider>
   )
 }
