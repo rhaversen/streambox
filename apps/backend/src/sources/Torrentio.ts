@@ -5,9 +5,6 @@ interface TorrentioStream {
   name: string
   title: string
   url?: string
-  infoHash?: string
-  fileIdx?: number
-  behaviorHints?: { bingeGroup?: string; filename?: string }
 }
 
 interface TorrentioResponse {
@@ -39,14 +36,10 @@ export class Torrentio {
     const name = stream.name ?? ''
     const title = stream.title ?? ''
     return {
-      infoHash: stream.infoHash ?? '',
-      fileIdx: stream.fileIdx ?? 0,
       url: stream.url ?? '',
       quality: this.parseQuality(name + ' ' + title),
       source: this.parseSource(name + ' ' + title),
       codec: this.parseCodec(name + ' ' + title),
-      score: 0,
-      title: title.split('\n')[0] ?? '',
     }
   }
 

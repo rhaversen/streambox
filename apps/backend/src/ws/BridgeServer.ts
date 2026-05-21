@@ -2,8 +2,8 @@ import type { FastifyInstance } from 'fastify'
 import type { BridgeMessage, StreamInfo, Show } from '@streambox/shared-types'
 import type { StreamResolver } from '../debrid/StreamResolver.js'
 import type { TMDB } from '../metadata/TMDB.js'
-import { randomUUID } from 'crypto'
-import { probeStream, startHlsStream, StreamCancelledError, type AudioStreamInfo } from '../routes/hls.js'
+import type { MediaStore } from '../media/MediaStore.js'
+import { log, error } from '../logger.js'
 
 export class BridgeServer {
   private clients = new Set<import('ws').WebSocket>()
@@ -17,13 +17,12 @@ export class BridgeServer {
   private currentSeason?: number
   private currentEpisode?: number
   private currentShow?: Show
-  private currentSourceUrl?: string
-  private currentVideoCodec = ''
-  private currentAudioStreams: AudioStreamInfo[] = []
+  private messageQueue = Promise.resolve()
 
   constructor(
     private readonly resolver: StreamResolver,
     private readonly tmdb: TMDB,
+    private readonly store: MediaStore,
   ) {}
 
   register(fastify: FastifyInstance): void {
@@ -35,12 +34,13 @@ export class BridgeServer {
       socket.on('message', (raw: Buffer | string) => {
         try {
           const msg = JSON.parse(raw.toString()) as BridgeMessage
-          void this.handleMessage(msg).catch((err: unknown) => {
-            if (err instanceof StreamCancelledError) return
-            const message = err instanceof Error ? err.message : String(err)
-            console.error('[BridgeServer] handleMessage error:', err)
-            this.updateInfo({ loading: false, errorMessage: message })
-          })
+          this.messageQueue = this.messageQueue
+            .then(() => this.handleMessage(msg))
+            .catch((err: unknown) => {
+              const message = err instanceof Error ? err.message : String(err)
+              error('[BridgeServer] handleMessage error:', err)
+              this.updateInfo({ loading: false, errorMessage: message })
+            })
         } catch { /* ignore malformed */ }
       })
 
@@ -52,41 +52,38 @@ export class BridgeServer {
     switch (msg.type) {
       case 'PLAY': {
         const { imdbId, season, episode } = msg.payload
+        log(`[BridgeServer] PLAY imdbId=${imdbId} season=${season ?? '-'} episode=${episode ?? '-'}`)
         const t0 = Date.now()
 
-        this.updateInfo({ loading: true, title: imdbId, episode: undefined, streamUrl: null, errorMessage: undefined, streamStartTime: 0, transcodedEnd: undefined })
+        this.updateInfo({ loading: true, title: imdbId, episode: undefined, streamUrl: null, errorMessage: undefined })
 
-        const candidates = await this.resolver.resolve(imdbId, season, episode)
-        console.log(`[pipeline] torrentio: ${Date.now() - t0}ms`)
-
-        if (!candidates.length) {
+        const best = await this.resolver.resolve(imdbId, season, episode)
+        if (!best) {
           this.updateInfo({ loading: false, errorMessage: 'No streams found' })
           return
         }
-
-        const best = candidates[0]!
         const isShow = season !== undefined
-        const t1 = Date.now()
 
-        const [probeResult, meta] = await Promise.all([
-          probeStream(best.url),
+        const [probe, meta] = await Promise.all([
+          this.store.probe(best.url),
           isShow ? this.tmdb.getShowByImdbId(imdbId) : this.tmdb.getMovieByImdbId(imdbId),
         ])
-        console.log(`[pipeline] probe + tmdb (parallel): ${Date.now() - t1}ms, ${probeResult.audioStreams.length} audio track(s)`)
+        log(`[BridgeServer] probe: codec=${probe.videoCodec} dur=${probe.duration.toFixed(0)}s hasAudio=${probe.hasAudio}`)
 
-        const t2 = Date.now()
-        const manifestUrl = await startHlsStream(best.url, randomUUID(), probeResult.videoCodec, probeResult.audioStreams, 0,
-          (transcodedEnd) => this.updateInfo({ transcodedEnd }))
-        console.log(`[pipeline] hls first segment: ${Date.now() - t2}ms`)
-        console.log(`[pipeline] total: ${Date.now() - t0}ms`)
+        if (probe.duration <= 32 && !probe.hasAudio) {
+          this.updateInfo({ loading: false, errorMessage: 'No playable stream found' })
+          return
+        }
+
+
+        const key = this.store.makeKey(imdbId, season, episode)
+        await this.store.start(key, best.url, probe)
+        log(`[pipeline] total: ${Date.now() - t0}ms`)
 
         this.currentImdbId = imdbId
         this.currentSeason = season
         this.currentEpisode = episode
         this.currentShow = isShow && meta && 'seasons' in meta ? meta : undefined
-        this.currentSourceUrl = best.url
-        this.currentVideoCodec = probeResult.videoCodec
-        this.currentAudioStreams = probeResult.audioStreams
 
         const title = meta?.title ?? imdbId
         const episodeLabel =
@@ -94,21 +91,19 @@ export class BridgeServer {
             ? `S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`
             : undefined
 
-        this.updateInfo({ loading: false, title, episode: episodeLabel, streamUrl: manifestUrl, duration: probeResult.duration, errorMessage: undefined })
+        this.updateInfo({
+          loading: false,
+          title,
+          episode: episodeLabel,
+          streamUrl: `http://localhost:4000/api/hls/${key}/stream.m3u8`,
+          duration: probe.duration,
+          errorMessage: undefined,
+        })
         break
       }
       case 'NEXT_EPISODE':
         await this.handleNextEpisode()
         break
-      case 'SEEK_STREAM': {
-        const { position } = msg.payload
-        if (!this.currentSourceUrl) return
-        this.updateInfo({ loading: true, streamUrl: null, transcodedEnd: undefined })
-        const seekUrl = await startHlsStream(this.currentSourceUrl, randomUUID(), this.currentVideoCodec, this.currentAudioStreams, position,
-          (transcodedEnd) => this.updateInfo({ transcodedEnd }))
-        this.updateInfo({ loading: false, streamUrl: seekUrl, streamStartTime: position })
-        break
-      }
     }
   }
 
@@ -136,6 +131,9 @@ export class BridgeServer {
 
   private updateInfo(partial: Partial<StreamInfo>): void {
     this.streamInfo = { ...this.streamInfo, ...partial }
+    if ('streamUrl' in partial) {
+      log(`[BridgeServer] → streamUrl=${partial.streamUrl ?? 'null'}`)
+    }
     this.broadcast({ type: 'STREAM_INFO', payload: this.streamInfo })
   }
 
@@ -146,3 +144,4 @@ export class BridgeServer {
     }
   }
 }
+

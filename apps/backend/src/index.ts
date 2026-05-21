@@ -3,11 +3,11 @@ import fastifyCors from '@fastify/cors'
 import fastifyWebsocket from '@fastify/websocket'
 import { StreamResolver } from './debrid/StreamResolver.js'
 import { Torrentio } from './sources/Torrentio.js'
-import { StreamRanker } from './sources/StreamRanker.js'
 import { TMDB } from './metadata/TMDB.js'
 import { BridgeServer } from './ws/BridgeServer.js'
 import { registerApiRoutes } from './routes/api.js'
-import { registerHlsRoutes, initHlsDir } from './routes/hls.js'
+import { registerHlsRoutes } from './routes/hls.js'
+import { MediaStore } from './media/MediaStore.js'
 
 const {
   REAL_DEBRID_TOKEN = '',
@@ -18,17 +18,24 @@ const {
 if (!REAL_DEBRID_TOKEN) throw new Error('REAL_DEBRID_TOKEN is required')
 if (!TMDB_API_KEY) throw new Error('TMDB_API_KEY is required')
 
-const fastify = Fastify({ logger: true })
+const fastify = Fastify({
+  logger: {
+    transport: { target: 'pino-pretty', options: { colorize: true, translateTime: 'HH:MM:ss', ignore: 'pid,hostname' } },
+    level: 'info',
+  },
+})
 await fastify.register(fastifyCors, { origin: true })
 await fastify.register(fastifyWebsocket)
 
-const resolver = new StreamResolver(new Torrentio(undefined, REAL_DEBRID_TOKEN), new StreamRanker())
+const store = new MediaStore()
+await store.init()
+
+const resolver = new StreamResolver(new Torrentio(undefined, REAL_DEBRID_TOKEN))
 const tmdb = new TMDB(TMDB_API_KEY)
 
-const bridge = new BridgeServer(resolver, tmdb)
+const bridge = new BridgeServer(resolver, tmdb, store)
 bridge.register(fastify)
 registerApiRoutes(fastify, tmdb)
-registerHlsRoutes(fastify)
-await initHlsDir()
+registerHlsRoutes(fastify, store)
 
 await fastify.listen({ port: Number(PORT), host: '0.0.0.0' })
