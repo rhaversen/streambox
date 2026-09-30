@@ -4,7 +4,7 @@ import type { StreamResolver } from '../debrid/StreamResolver.js'
 import type { TMDB } from '../metadata/TMDB.js'
 import type { MediaStore } from '../media/MediaStore.js'
 import { MIN_PLAYABLE_DURATION_SECONDS } from '../media/constants.js'
-import { log, error } from '../logger.js'
+import logger from '../logger.js'
 
 function errorToSafeMessage(err: unknown): string {
   if (err instanceof Error) return err.message
@@ -45,7 +45,7 @@ export class BridgeServer {
             .then(() => this.handleMessage(msg))
             .catch((err: unknown) => {
               const message = errorToSafeMessage(err)
-              error(`[BridgeServer] handleMessage error: ${message}`)
+              logger.error('[BridgeServer] handleMessage error', { error: err })
               this.updateInfo({ loading: false, errorMessage: message })
             })
         } catch { /* ignore malformed */ }
@@ -59,7 +59,7 @@ export class BridgeServer {
     switch (msg.type) {
       case 'PLAY': {
         const { imdbId, season, episode } = msg.payload
-        log(`[BridgeServer] PLAY imdbId=${imdbId} season=${season ?? '-'} episode=${episode ?? '-'}`)
+        logger.info(`[BridgeServer] PLAY imdbId=${imdbId} season=${season ?? '-'} episode=${episode ?? '-'}`)
         const t0 = Date.now()
 
         this.updateInfo({ loading: true, title: imdbId, episode: undefined, streamUrl: null, errorMessage: undefined })
@@ -75,7 +75,7 @@ export class BridgeServer {
           this.store.probe(best.url),
           isShow ? this.tmdb.getShowByImdbId(imdbId) : this.tmdb.getMovieByImdbId(imdbId),
         ])
-        log(`[BridgeServer] probe: codec=${probe.videoCodec} dur=${probe.duration.toFixed(0)}s hasAudio=${probe.hasAudio}`)
+        logger.info(`[BridgeServer] probe: codec=${probe.videoCodec} dur=${probe.duration.toFixed(0)}s hasAudio=${probe.hasAudio}`)
 MIN_PLAYABLE_DURATION_SECONDS
         if (probe.duration <= 32 && !probe.hasAudio) {
           this.updateInfo({ loading: false, errorMessage: 'No playable stream found' })
@@ -85,7 +85,7 @@ MIN_PLAYABLE_DURATION_SECONDS
 
         const key = this.store.makeKey(imdbId, season, episode)
         await this.store.start(key, best.url, probe)
-        log(`[pipeline] total: ${Date.now() - t0}ms`)
+        logger.info(`[pipeline] total: ${Date.now() - t0}ms`)
 
         this.currentImdbId = imdbId
         this.currentSeason = season
@@ -139,7 +139,7 @@ MIN_PLAYABLE_DURATION_SECONDS
   private updateInfo(partial: Partial<StreamInfo>): void {
     this.streamInfo = { ...this.streamInfo, ...partial }
     if ('streamUrl' in partial) {
-      log(`[BridgeServer] → streamUrl=${partial.streamUrl ?? 'null'}`)
+      logger.info(`[BridgeServer] → streamUrl=${partial.streamUrl ?? 'null'}`)
     }
     this.broadcast({ type: 'STREAM_INFO', payload: this.streamInfo })
   }

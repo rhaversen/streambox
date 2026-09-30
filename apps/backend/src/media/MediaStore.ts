@@ -3,7 +3,7 @@ import { promises as fs } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import type { DownloadInsight } from '@streambox/shared-types'
-import { log, warn, error } from '../logger.js'
+import logger from '../logger.js'
 import type { MediaEntry, ProbeResult } from './types.js'
 import { ffmpegPath, probeMedia, buildVideoArgs, buildAudioArgs } from './ffmpeg.js'
 import { makeKey as makeKeyUtil } from './validation.js'
@@ -58,7 +58,7 @@ export class MediaStore {
         status: 'complete',
         probe: probeData,
       })
-      log(`[MediaStore] Restored: ${name}`)
+      logger.info(`[MediaStore] Restored: ${name}`)
     }
   }
 
@@ -77,11 +77,11 @@ export class MediaStore {
   async start(key: string, url: string, probe: ProbeResult): Promise<void> {
     const existing = this.entries.get(key)
     if (existing) {
-      log(`[MediaStore] Reusing ${key} (status=${existing.status})`)
+      logger.info(`[MediaStore] Reusing ${key} (status=${existing.status})`)
       return
     }
 
-    log(`[MediaStore] Starting FFmpeg for ${key} — codec=${probe.videoCodec} dur=${probe.duration.toFixed(0)}s hasAudio=${probe.hasAudio}`)
+    logger.info(`[MediaStore] Starting FFmpeg for ${key} — codec=${probe.videoCodec} dur=${probe.duration.toFixed(0)}s hasAudio=${probe.hasAudio}`)
 
     const dir = join(BASE_DIR, key)
     await fs.mkdir(dir, { recursive: true })
@@ -110,15 +110,15 @@ export class MediaStore {
     ], { cwd: dir })
 
     entry.process = ff
-    ff.stderr.on('data', (d: Buffer) => warn(`[ffmpeg:${key}] ${d.toString().trimEnd()}`))
+    ff.stderr.on('data', (d: Buffer) => logger.warn(`[ffmpeg:${key}] ${d.toString().trimEnd()}`))
     ff.on('error', (err: Error) => {
-      error(`[ffmpeg:${key}] ${err.message}`)
+      logger.error(`[ffmpeg:${key}] ffmpeg error`, { error: err })
       entry.status = 'error'
     })
     ff.on('close', (code) => {
       entry.process = null
       entry.status = code === 0 || code === null ? 'complete' : 'error'
-      log(`[MediaStore] FFmpeg ${key} exited — code=${code} status=${entry.status}`)
+      logger.info(`[MediaStore] FFmpeg ${key} exited — code=${code} status=${entry.status}`)
     })
 
     await this.waitForFile(entry, 'stream.m3u8')

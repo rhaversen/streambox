@@ -1,7 +1,7 @@
 import axios from 'axios'
 import type { StreamCandidate } from '@streambox/shared-types'
 import { Torrentio } from '../sources/Torrentio.js'
-import { log } from '../logger.js'
+import logger from '../logger.js'
 
 const MIN_BYTES = 5 * 1_048_576 // 5 MB
 const CONCURRENCY = 5
@@ -40,7 +40,7 @@ export class StreamResolver {
 
   async resolve(imdbId: string, season?: number, episode?: number): Promise<StreamCandidate | null> {
     const candidates = await this.torrentio.search(imdbId, season, episode)
-    log(`[StreamResolver] ${candidates.length} candidates for ${imdbId}`)
+    logger.info(`[StreamResolver] ${candidates.length} candidates for ${imdbId}`)
     if (candidates.length === 0) return null
 
     const sorted = candidates
@@ -57,15 +57,15 @@ export class StreamResolver {
       for (const { candidate, contentLength } of results) {
         const sizeStr = contentLength !== undefined ? mb(contentLength) : '(unknown)'
         if (contentLength !== undefined && contentLength < MIN_BYTES) {
-          log(`[StreamResolver] Skipping small (${sizeStr}): ${candidate.quality} ${candidate.source}`)
+          logger.info(`[StreamResolver] Skipping small (${sizeStr}): ${candidate.quality} ${candidate.source}`)
           continue
         }
-        log(`[StreamResolver] Resolved: ${candidate.quality} ${candidate.source} (${sizeStr})`)
+        logger.info(`[StreamResolver] Resolved: ${candidate.quality} ${candidate.source} (${sizeStr})`)
         return candidate
       }
     }
 
-    log(`[StreamResolver] All candidates below size threshold for ${imdbId}`)
+    logger.info(`[StreamResolver] All candidates below size threshold for ${imdbId}`)
     return null
   }
 }

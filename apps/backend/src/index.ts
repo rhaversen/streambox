@@ -1,4 +1,4 @@
-import Fastify from 'fastify'
+import Fastify, { type FastifyBaseLogger } from 'fastify'
 import fastifyCors from '@fastify/cors'
 import fastifyWebsocket from '@fastify/websocket'
 import { StreamResolver } from './debrid/StreamResolver.js'
@@ -8,6 +8,7 @@ import { BridgeServer } from './ws/BridgeServer.js'
 import { registerApiRoutes } from './routes/api.js'
 import { registerHlsRoutes } from './routes/hls.js'
 import { MediaStore } from './media/MediaStore.js'
+import baseLogger from './logger.js'
 
 const {
   REAL_DEBRID_TOKEN = '',
@@ -19,11 +20,18 @@ const {
 if (!REAL_DEBRID_TOKEN) throw new Error('REAL_DEBRID_TOKEN is required')
 if (!TMDB_API_KEY) throw new Error('TMDB_API_KEY is required')
 
+const fastifyLogger = {
+  info: (msg: unknown, ...args: unknown[]) => baseLogger.info(`${String(msg)}${args.length ? ` ${args.map(String).join(' ')}` : ''}`),
+  error: (msg: unknown, ...args: unknown[]) => baseLogger.error(`${String(msg)}${args.length ? ` ${args.map(String).join(' ')}` : ''}`),
+  warn: (msg: unknown, ...args: unknown[]) => baseLogger.warn(`${String(msg)}${args.length ? ` ${args.map(String).join(' ')}` : ''}`),
+  debug: (msg: unknown, ...args: unknown[]) => baseLogger.debug(`${String(msg)}${args.length ? ` ${args.map(String).join(' ')}` : ''}`),
+  trace: (msg: unknown, ...args: unknown[]) => baseLogger.verbose(`${String(msg)}${args.length ? ` ${args.map(String).join(' ')}` : ''}`),
+  fatal: (msg: unknown, ...args: unknown[]) => baseLogger.error(`${String(msg)}${args.length ? ` ${args.map(String).join(' ')}` : ''}`),
+  child: () => fastifyLogger,
+}
+
 const fastify = Fastify({
-  logger: {
-    transport: { target: 'pino-pretty', options: { colorize: true, translateTime: 'HH:MM:ss', ignore: 'pid,hostname' } },
-    level: 'info',
-  },
+  loggerInstance: fastifyLogger as unknown as FastifyBaseLogger,
 })
 const allowedOrigins = new Set([
   'http://localhost:5173',
