@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useFocusable, FocusContext } from '@noriginmedia/norigin-spatial-navigation'
-import type { DownloadInsight, DownloadInsightsResponse, MediaItem, Season } from '@streambox/shared-types'
+import type { DownloadInsight, DownloadInsightsResponse, MediaItem, Movie, Season } from '@streambox/shared-types'
 import { isShow } from '@streambox/shared-types'
 import axios from 'axios'
 
@@ -59,7 +59,7 @@ export function Detail() {
   }
 
   const show = isShow(item) ? item : null
-  const movie = !isShow(item) ? item : null
+  const movie = !isShow(item) ? (item as Movie) : null
   const currentSeason = show?.seasons[seasonIndex] ?? null
   const year = show?.firstAirDate.slice(0, 4) ?? movie?.releaseDate.slice(0, 4)
   const meta = [year, movie?.runtime ? `${movie.runtime}m` : null, ...item.genres.slice(0, 3)]

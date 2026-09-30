@@ -1,37 +1,43 @@
-import { spawn, type ChildProcess } from 'child_process'
+import { spawn } from 'child_process'
 import { promises as fs } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
-import { createRequire } from 'module'
 import type { DownloadInsight } from '@streambox/shared-types'
 import { log, warn, error } from '../logger.js'
-
-const _require = createRequire(import.meta.url)
-const ffmpegPath = _require('ffmpeg-static') as string
-const ffprobePath = _require('ffprobe-static') as { path: string }
+import type { MediaEntry, ProbeResult } from './types.js'
+import { ffmpegPath, probeMedia, buildVideoArgs, buildAudioArgs } from './ffmpeg.js'
+import { makeKey as makeKeyUtil } from './validation.js'
+import {
+  HTTP_FLAGS,
+  HLS_SEGMENT_DURATION,
+  HLS_LIST_SIZE,
+  HLS_SEGMENT_FILENAME_PATTERN,
+  VIDEO_PRESET,
+  VIDEO_CRF,
+  VIDEO_SCALE_HEIGHT,
+  AUDIO_BITRATE,
+  AUDIO_CHANNELS,
+  FILE_WAIT_TIMEOUT_MS,
+  FILE_WAIT_RETRY_INTERVAL_MS,
+} from './constants.js'
 
 export const BASE_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'media-cache')
 
-const HTTP_FLAGS = [
-  '-user_agent', 'Mozilla/5.0 (compatible)',
-  '-reconnect', '1',
-  '-reconnect_streamed', '1',
-  '-reconnect_delay_max', '5',
-]
+export type { MediaEntry, ProbeResult }
 
-export interface ProbeResult {
-  duration: number
-  videoCodec: string
-  hasAudio: boolean
-}
-
-export interface MediaEntry {
-  dir: string
-  process: ChildProcess | null
-  status: 'running' | 'complete' | 'error'
-  probe: ProbeResult
-}
-
+/**
+ * MediaStore - HLS Streaming and Caching
+ * 
+ * Manages FFmpeg transcoding from source URLs to HLS segments.
+ * HLS segments are cached permanently for instant re-watch.
+ * 
+ * Future: Will be refactored to V3 architecture with separate services:
+ * - HLSStreamingService: Handle playback transcoding
+ * - SourceArchiveService: Preserve original quality in background
+ * - MediaCoordinator: Orchestrate between services
+ * 
+ * See docs/CACHING_PLAN_V3.md for architecture details.
+ */
 export class MediaStore {
   private entries = new Map<string, MediaEntry>()
 
@@ -57,9 +63,7 @@ export class MediaStore {
   }
 
   makeKey(imdbId: string, season?: number, episode?: number): string {
-    return season !== undefined
-      ? `${imdbId}_s${String(season).padStart(2, '0')}e${String(episode!).padStart(2, '0')}`
-      : imdbId
+    return makeKeyUtil(imdbId, season, episode)
   }
 
   getEntry(key: string): MediaEntry | undefined {
@@ -67,31 +71,7 @@ export class MediaStore {
   }
 
   async probe(url: string): Promise<ProbeResult> {
-    return new Promise((resolve) => {
-      const ff = spawn(ffprobePath.path, [
-        '-v', 'quiet', '-print_format', 'json',
-        '-analyzeduration', '2000000', '-probesize', '1000000',
-        '-show_format', '-show_streams',
-        ...HTTP_FLAGS, url,
-      ])
-      let out = ''
-      ff.stdout.on('data', (d: Buffer) => { out += d.toString() })
-      ff.on('close', () => {
-        try {
-          const info = JSON.parse(out) as {
-            format?: { duration?: string }
-            streams?: Array<{ codec_type?: string; codec_name?: string }>
-          }
-          const duration = parseFloat(info.format?.duration ?? '0') || 0
-          const videoCodec = info.streams?.find((s) => s.codec_type === 'video')?.codec_name ?? ''
-          const hasAudio = (info.streams ?? []).some((s) => s.codec_type === 'audio')
-          resolve({ duration, videoCodec, hasAudio })
-        } catch {
-          resolve({ duration: 0, videoCodec: '', hasAudio: false })
-        }
-      })
-      ff.on('error', () => resolve({ duration: 0, videoCodec: '', hasAudio: false }))
-    })
+    return probeMedia(url)
   }
 
   async start(key: string, url: string, probe: ProbeResult): Promise<void> {
@@ -110,13 +90,8 @@ export class MediaStore {
     const entry: MediaEntry = { dir, process: null, status: 'running', probe }
     this.entries.set(key, entry)
 
-    const videoArgs = probe.videoCodec !== 'h264'
-      ? ['-vf', 'setpts=PTS-STARTPTS,scale=-2:1080', '-c:v', 'libx264', '-preset', 'superfast', '-crf', '22']
-      : ['-vf', 'setpts=PTS-STARTPTS', '-c:v', 'libx264', '-preset', 'superfast', '-crf', '22']
-
-    const audioArgs = probe.hasAudio
-      ? ['-map', '0:a:0', '-af', 'asetpts=PTS-STARTPTS', '-c:a', 'aac', '-b:a', '192k', '-ac', '2']
-      : []
+    const videoArgs = buildVideoArgs(probe.videoCodec, VIDEO_SCALE_HEIGHT, VIDEO_PRESET, VIDEO_CRF)
+    const audioArgs = buildAudioArgs(probe.hasAudio, AUDIO_BITRATE, AUDIO_CHANNELS)
 
     const ff = spawn(ffmpegPath, [
       '-loglevel', 'warning',
@@ -126,11 +101,11 @@ export class MediaStore {
       ...videoArgs,
       ...audioArgs,
       '-f', 'hls',
-      '-hls_time', '6',
-      '-hls_list_size', '0',
+      '-hls_time', String(HLS_SEGMENT_DURATION),
+      '-hls_list_size', String(HLS_LIST_SIZE),
       '-hls_flags', 'independent_segments',
       '-hls_playlist_type', 'event',
-      '-hls_segment_filename', 'stream_%05d.ts',
+      '-hls_segment_filename', HLS_SEGMENT_FILENAME_PATTERN,
       'stream.m3u8',
     ], { cwd: dir })
 
@@ -178,13 +153,13 @@ export class MediaStore {
     return Object.fromEntries(pairs)
   }
 
-  async waitForFile(entry: MediaEntry, filename: string, timeoutMs = 120_000): Promise<void> {
+  async waitForFile(entry: MediaEntry, filename: string, timeoutMs = FILE_WAIT_TIMEOUT_MS): Promise<void> {
     const path = join(entry.dir, filename)
     const deadline = Date.now() + timeoutMs
     while (Date.now() < deadline) {
       try { await fs.access(path); return } catch {}
       if (entry.status === 'error') throw new Error('FFmpeg failed')
-      await new Promise<void>((res) => setTimeout(res, 500))
+      await new Promise<void>((res) => setTimeout(res, FILE_WAIT_RETRY_INTERVAL_MS))
     }
     throw new Error(`Timeout waiting for ${filename}`)
   }

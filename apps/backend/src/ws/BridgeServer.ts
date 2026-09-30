@@ -3,6 +3,7 @@ import type { BridgeMessage, StreamInfo, Show } from '@streambox/shared-types'
 import type { StreamResolver } from '../debrid/StreamResolver.js'
 import type { TMDB } from '../metadata/TMDB.js'
 import type { MediaStore } from '../media/MediaStore.js'
+import { MIN_PLAYABLE_DURATION_SECONDS } from '../media/constants.js'
 import { log, error } from '../logger.js'
 
 function errorToSafeMessage(err: unknown): string {
@@ -28,6 +29,7 @@ export class BridgeServer {
     private readonly resolver: StreamResolver,
     private readonly tmdb: TMDB,
     private readonly store: MediaStore,
+    private readonly apiBaseUrl: string,
   ) {}
 
   register(fastify: FastifyInstance): void {
@@ -74,7 +76,7 @@ export class BridgeServer {
           isShow ? this.tmdb.getShowByImdbId(imdbId) : this.tmdb.getMovieByImdbId(imdbId),
         ])
         log(`[BridgeServer] probe: codec=${probe.videoCodec} dur=${probe.duration.toFixed(0)}s hasAudio=${probe.hasAudio}`)
-
+MIN_PLAYABLE_DURATION_SECONDS
         if (probe.duration <= 32 && !probe.hasAudio) {
           this.updateInfo({ loading: false, errorMessage: 'No playable stream found' })
           return
@@ -100,7 +102,7 @@ export class BridgeServer {
           loading: false,
           title,
           episode: episodeLabel,
-          streamUrl: `http://localhost:4000/api/hls/${key}/stream.m3u8`,
+          streamUrl: `${this.apiBaseUrl}/api/hls/${key}/stream.m3u8`,
           duration: probe.duration,
           errorMessage: undefined,
         })

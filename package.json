@@ -1,14 +1,17 @@
 {
-  "name": "streambox",
-  "private": true,
-  "packageManager": "pnpm@11.1.2",
-  "scripts": {
-    "dev": "pnpm --parallel --filter @streambox/backend --filter @streambox/ui dev",
-    "build": "pnpm --filter @streambox/shared-types build && pnpm --parallel --filter @streambox/backend --filter @streambox/ui build",
-    "typecheck": "pnpm -r typecheck",
-    "lint": "pnpm -r lint"
-  },
-  "devDependencies": {
-    "typescript": "^6.0.3"
-  }
+	"name": "streambox",
+	"private": true,
+	"packageManager": "pnpm@11.1.2",
+	"scripts": {
+		"dev": "pnpm --parallel --filter @streambox/backend --filter @streambox/ui dev",
+		"build": "pnpm --filter @streambox/shared-types build && pnpm --parallel --filter @streambox/backend --filter @streambox/ui build",
+		"typecheck": "pnpm -r typecheck",
+		"lint": "pnpm -r lint"
+	},
+	"devDependencies": {
+		"typescript": "^6.0.3"
+	},
+	"engines": {
+		"node": ">=24.0.0"
+	}
 }

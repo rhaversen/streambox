@@ -13,6 +13,7 @@ const {
   REAL_DEBRID_TOKEN = '',
   TMDB_API_KEY = '',
   PORT = '4000',
+  API_BASE_URL = 'http://localhost:4000',
 } = process.env
 
 if (!REAL_DEBRID_TOKEN) throw new Error('REAL_DEBRID_TOKEN is required')
@@ -52,7 +53,7 @@ await store.init()
 const resolver = new StreamResolver(new Torrentio(undefined, REAL_DEBRID_TOKEN))
 const tmdb = new TMDB(TMDB_API_KEY)
 
-const bridge = new BridgeServer(resolver, tmdb, store)
+const bridge = new BridgeServer(resolver, tmdb, store, API_BASE_URL)
 bridge.register(fastify)
 registerApiRoutes(fastify, tmdb, store)
 registerHlsRoutes(fastify, store)
